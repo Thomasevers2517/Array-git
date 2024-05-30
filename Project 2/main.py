@@ -1,0 +1,4 @@
+NUM_OF_MIC = 4
+NUM_OF_SRC = 4
+NOISE_STD_DEV = 1
+
