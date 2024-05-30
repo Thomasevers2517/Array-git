@@ -12,7 +12,7 @@ def generate_data(M, N, delta, theta, f, snr):
         theta : list
         List of angles of arrival of sources
         f : list
-        List of frequencies of sources
+        List of normalized frequencies of sources, should be between 0 and 1
         snr : list
         List of signal to noise ratios for sources
         Returns
@@ -26,6 +26,16 @@ def generate_data(M, N, delta, theta, f, snr):
         NOISE : numpy.ndarray
         Matrix of noise
         """
+    assert M > 0, "Number of antennas should be greater than 0"
+    assert N > 0, "Number of samples should be greater than 0"
+    assert delta > 0, "Time delay between antennas should be greater than 0"
+    assert len(theta) > 0, "List of angles of arrival of sources should be greater than 0"
+    assert len(f) ==len(theta), "List of frequencies of sources should be equal to the number of sources"
+    assert len(snr) == len(theta), "List of signal to noise ratios for sources should be equal to the number of sources"
+    assert all(isinstance(i, int) for i in [M, N]), "Number of antennas and number of samples should be integers"
+    assert all(theta[i] >= -np.pi and theta[i] <= np.pi for i in range(len(theta))), "Angles of arrival of sources should be between -pi and pi"
+    
+    
     print("Generating data with the following parameters:")
     print("num antennas (M): ", M)
     print("num samples (N): ", N)
