@@ -1,5 +1,31 @@
 import numpy as np
 def generate_data(M, N, delta, theta, f, snr):
+    """Generates data for the given parameters
+    Parameters
+    ----------
+        M : int
+        Number of antennas
+        N : int
+        Number of samples
+        delta : float
+        Time delay between antennas
+        theta : list
+        List of angles of arrival of sources
+        f : list
+        List of frequencies of sources
+        snr : list
+        List of signal to noise ratios for sources
+        Returns
+        -------
+        X : numpy.ndarray
+        Matrix of data generated
+        S : numpy.ndarray
+        Matrix of sources
+        TAU : numpy.ndarray
+        Matrix of time delays
+        NOISE : numpy.ndarray
+        Matrix of noise
+        """
     print("Generating data with the following parameters:")
     print("num antennas (M): ", M)
     print("num samples (N): ", N)
