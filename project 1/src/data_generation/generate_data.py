@@ -1,5 +1,5 @@
 import numpy as np
-def generate_data(M, N, delta, theta, f, snr):
+def generate_data(M, N, delta, theta_degrees, f, snr_db):
     """Generates data for the given parameters
     Parameters
     ----------
@@ -9,12 +9,12 @@ def generate_data(M, N, delta, theta, f, snr):
         Number of samples
         delta : float
         Time delay between antennas
-        theta : list
-        List of angles of arrival of sources
+        theta_degrees : list
+        List of angles of arrival of sources between -180 and 180 degrees
         f : list
         List of normalized frequencies of sources, should be between 0 and 1
-        snr : list
-        List of signal to noise ratios for sources
+        snr_db : list
+        List of signal to noise ratios for sources in dB
         Returns
         -------
         X : numpy.ndarray
@@ -26,6 +26,8 @@ def generate_data(M, N, delta, theta, f, snr):
         NOISE : numpy.ndarray
         Matrix of noise
         """
+    theta = np.deg2rad(theta_degrees)
+    snr = np.power(10, np.array(snr_db)/10)
     assert M > 0, "Number of antennas should be greater than 0"
     assert N > 0, "Number of samples should be greater than 0"
     assert delta > 0, "Time delay between antennas should be greater than 0"
