@@ -1,13 +1,13 @@
 import numpy as np
 import scipy as sp
-def generate_data_khatri_rao(M=3, N=500, theta_degrees=[30, 50], f = [0.005, 0.002], snr_db=[100, 100]):
+def generate_data_khatri_rao(M=3, N=500, theta_degrees=[30, 50], f = [0.005, 0.002], snr_db=[100, 100], m=5):
     d = len(theta_degrees)
     P = 60
     f = np.array(f)
     theta = np.array(np.deg2rad(theta_degrees))
     snr_db = np.array(snr_db)
     delta = 0.2
-    m = 5
+    
     assert all(f < P/2) and all(f > -P/2), "f*Fs should be less than P/2 and greater than 0"
     
     phi = np.exp(1j*2*np.pi*f/P)
