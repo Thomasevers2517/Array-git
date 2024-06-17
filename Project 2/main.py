@@ -161,17 +161,19 @@ def main():
     combined_signal = combined_signal / NUM_OF_MIC
 
     # Determine the relative transfer function (RTF) for each microphone
-    # atf_cheating, Rx, Rn, sig_var, stft_mic_signals = atf.determine_atf_a_priori(num_sources, num_mics, path_signals)
-    # print("atf_cheating.shape: ", atf_cheating.shape)
+    atf_cheating, Rx, Rn, sig_var, stft_mic_signals = atf.determine_atf_a_priori(num_sources, num_mics, path_signals)
+    print("atf_cheating.shape: ", atf_cheating.shape)
     
     # Estimate the relative transfer function (RTF) for each microphone using prewhitening
-    rtf_estimated_prewhiten, Rx, Rn, sig_var, stft_mic_signals = atf.estimate_rtf_prewhiten(num_mics, mic_signals)
-    print("rtf_estimated_prewhiten: ", rtf_estimated_prewhiten)
+    # rtf_estimated_prewhiten, Rx, Rn, sig_var, stft_mic_signals = atf.estimate_rtf_prewhiten(num_mics, mic_signals)
+    # print("rtf_estimated_prewhiten: ", rtf_estimated_prewhiten)
 
     # # Estimate the relative transfer function (RTF) for each microphone using generalized eigenvalue decomposition (GEVD)
     # rtf_estimated_GEVD = atf.estimate_rtf_GEVD(impulse_responses)
     # print("rtf_estimated_GEVD: ", rtf_estimated_GEVD)
 
+    # Intellegibilty detector
+    
     # Infer geometry from impulse responses
     # geometry = atf.infer_geometry_ULA(impulse_responses)
     # print("Geometry: ", geometry)
@@ -192,7 +194,7 @@ def main():
 
     # Calculate a dealy-and-sum beamformer
     print("Calculating delay-and-sum beamformer...")
-    delay_and_sum_weights = beam_former.calculate_delay_and_sum_weights(rtf_estimated_prewhiten)
+    delay_and_sum_weights = beam_former.calculate_delay_and_sum_weights(atf_cheating)
 
     # Visualize the beamforming weights
     #beam_former.calculate_output_SNR(delay_and_sum_weights, Rx, Rn)
@@ -209,7 +211,7 @@ def main():
     
     # Calculate weigths for the MVDR beamformer
     print("Calculating MVDR beamformer...")
-    w_mvdr = beam_former.calculate_mvdr_weights(rtf_estimated_prewhiten, Rn)
+    w_mvdr = beam_former.calculate_mvdr_weights(atf_cheating, Rn)
     
     # Measure Visualize the beamforming weights
     #beam_former.calculate_output_SNR(w_mvdr, Rx, Rn)
@@ -219,7 +221,6 @@ def main():
     # Apply the MVDR beamformer to enhance the audio signal
     print("Applying MVDR beamformer...")
     enhanced_signal_mvdr = beam_former.apply_beamforming_weights(stft_mic_signals, w_mvdr)
-    print("Enhanced signal (MVDR Beamformer):", enhanced_signal_mvdr)
 
     # Play the enhanced signal
     play_audio_show_spectrum(enhanced_signal_mvdr, sample_rate)
@@ -227,7 +228,7 @@ def main():
 
     # Apply the Multi-Channel Wiener
     print("Calculating Multi-Channel Wiener beamformer...")
-    w_MCWiener = beam_former.calculate_Multi_channel_Wiener_weigths(rtf_estimated_prewhiten, Rn, sig_var, w_mvdr)
+    w_MCWiener = beam_former.calculate_Multi_channel_Wiener_weigths(atf_cheating, Rn, sig_var, w_mvdr)
 
     # Visualize the beamforming weights
     #beam_former.visualize_beamforming_weights(w_MCWiener)

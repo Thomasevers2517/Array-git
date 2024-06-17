@@ -109,7 +109,7 @@ def calculate_delay_and_sum_weights(rtf):
    
     return delay_and_sum_beamformer
 
-def calculate_mvdr_weights(rtf, Rx):
+def calculate_mvdr_weights(rtf, Rn):
 
     # Get the number of wave numbers and timeslots
     num_wave_numbers = rtf.shape[0]
@@ -117,16 +117,16 @@ def calculate_mvdr_weights(rtf, Rx):
 
     # Calculate the delay-and-sum beamforming weights
     mvdr_beamformer = np.zeros(rtf.shape, dtype=np.complex64)
-    inverse_covariance_matrix = np.zeros(Rx.shape, dtype=np.complex64)
+    inverse_covariance_matrix = np.zeros(Rn.shape, dtype=np.complex64)
     for l in range(num_timeslots):
         for k in range(num_wave_numbers):
             # Add a small amount of noise to the diagonal of the covariance matrix
-            Rx_reg = Rx[k][l] + np.eye(Rx[k][l].shape[0]) * 1e-6
+            Rn_reg = Rn[k][l] + np.eye(Rn[k][l].shape[0]) * 1e-6 #TODO: Why 1e-6
 
             # Calculate the beamforming weights using the minimum variance distortionless response (MVDR) algorithm
-            inverse_covariance_matrix[k][l] = np.linalg.inv(Rx_reg)
+            inverse_covariance_matrix[k][l] = np.linalg.inv(Rn_reg)
             
-            mvdr_beamformer[k][l] = np.dot(inverse_covariance_matrix[k][l], rtf[k][l]) / (np.dot(np.dot(rtf[k][l].T, inverse_covariance_matrix[k][l]), rtf[k][l]))
+            mvdr_beamformer[k][l] = np.dot(inverse_covariance_matrix[k][l], rtf[k][l]) / (np.dot(np.dot(rtf[k][l].conj().T, inverse_covariance_matrix[k][l]), rtf[k][l]))
    
     return mvdr_beamformer
 
@@ -147,9 +147,9 @@ def calculate_Multi_channel_Wiener_weigths(rtf, Rn, sig_var, MVDR_weigths):
             inverse_covariance_matrix[k][l] = np.linalg.inv(Rn_reg)
 
             # Single channel Wiener filter
-            SC_Winer_w = sig_var[k][l] / (sig_var[k][l] + np.dot(np.dot(rtf[k][l].T, inverse_covariance_matrix[k][l]), rtf[k][l]))
+            SC_Winer_w = sig_var[k][l] / (sig_var[k][l] + np.dot(np.dot(rtf[k][l].conj().T, inverse_covariance_matrix[k][l]), rtf[k][l]))
 
             # Multi channel Wiener filter
-            mcw_beamformer[k][l] = SC_Winer_w * MVDR_weigths[k][l]
+            mcw_beamformer[k][l] = np.multiply(SC_Winer_w, MVDR_weigths[k][l])
     
     return mcw_beamformer
