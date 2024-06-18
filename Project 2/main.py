@@ -32,19 +32,15 @@ import pygame
 from pygame.locals import *
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 import queue
+from scipy.signal import butter, lfilter
 
 import src.load_audio as load_audio
 import src.beam_former as beam_former
-import src.atf as atf
+import src.rtf as rtf
+import src.intel_metric as intel_metric
 
 # Create a queue to hold the data
 data_queue = queue.Queue()
-
-# Constants
-NUM_OF_MIC = 4
-NUM_OF_SRC = 5
-STFT_WINDOW_TIME = 0.02 #seconds
-NOISE_STD_DEV = 1
 
 class PlayerThread(threading.Thread):
     def __init__(self, audio_data, sample_rate, volume=1.0):
@@ -147,40 +143,61 @@ def play_audio_show_spectrum(audio_data, sample_rate, play_volume=0.33):
     # Close the Pygame window
     pygame.quit()
 
+def bandpass_filter(signal, lowcut, highcut, fs, order=5):
+    # Normalize the frequencies
+    nyq = 0.5 * fs
+    low = lowcut / nyq
+    high = highcut / nyq
+
+    # Design the Butterworth filter
+    b, a = butter(order, [low, high], btype='band')
+
+    # Apply the filter
+    filtered_signal = lfilter(b, a, signal)
+
+    return filtered_signal
+
 def main():
     # Initialize Pygame
     pygame.init()
 
     # Load audio data
-    num_sources, num_mics, sample_rate, mic_signals, path_signals = load_audio.convolve_audio_sources(data_folder="src/data/")
-    
+    impulse_responses, num_sources, num_mics, sample_rate, mic_signals, clean_signal, path_signals = load_audio.convolve_audio_sources(data_folder="src/data/")
+
     # Add all the signals from the microphones with equal weigths to create the combined signal
     combined_signal = np.zeros_like(mic_signals[0])
-    for i in range(0, NUM_OF_MIC):
+    for i in range(0, num_mics):
         combined_signal += mic_signals[i]
-    combined_signal = combined_signal / NUM_OF_MIC
+    combined_signal = combined_signal / num_mics
 
-    # Determine the relative transfer function (RTF) for each microphone
-    atf_cheating, Rx, Rn, sig_var, stft_mic_signals = atf.determine_atf_a_priori(num_sources, num_mics, path_signals)
-    print("atf_cheating.shape: ", atf_cheating.shape)
+    # # Determine the relative transfer function (RTF) for each microphone
+    rtf_cheating, Rx, Rn, sig_var, stft_mic_signals = rtf.determine_rtf_a_priori_CPSD(num_sources, num_mics, mic_signals, path_signals)
+
+    # STOI Score of original signal
+    stoi_score = intel_metric.calculate_stoi(clean_signal[:len(combined_signal)], combined_signal, sample_rate)
+    print(f"STOI Score of raw combined mic signal: {stoi_score}")
     
-    # Estimate the relative transfer function (RTF) for each microphone using prewhitening
-    # rtf_estimated_prewhiten, Rx, Rn, sig_var, stft_mic_signals = atf.estimate_rtf_prewhiten(num_mics, mic_signals)
-    # print("rtf_estimated_prewhiten: ", rtf_estimated_prewhiten)
+    # Assuming `clean_signal` and `noise_reduced_signal` are available
+    # siib_score = intel_metric.compute_siib(clean_signal[:len(combined_signal)], combined_signal, sample_rate)
+    # print(f"SIIB Score of raw combined mic signal: {siib_score}")
 
-    # # Estimate the relative transfer function (RTF) for each microphone using generalized eigenvalue decomposition (GEVD)
-    # rtf_estimated_GEVD = atf.estimate_rtf_GEVD(impulse_responses)
-    # print("rtf_estimated_GEVD: ", rtf_estimated_GEVD)
+    filtered_signal = bandpass_filter(combined_signal, lowcut=1000, highcut=6000, fs=sample_rate)
+    stoi_score = intel_metric.calculate_stoi(clean_signal[:len(filtered_signal)], filtered_signal, sample_rate)
+    print(f"STOI Score of filtered signal: {stoi_score}")
 
-    # Intellegibilty detector
-    
+    #  Estimate the relative transfer function (RTF) for each microphone using prewhitening
+    rtf_estimated_prewhiten, Rx, Rn, sig_var, stft_mic_signals, istft_mic_sig = rtf.estimate_rtf_prewhiten(num_mics, mic_signals, path_signals)
+    print("rtf_estimated_prewhiten: ", rtf_estimated_prewhiten)
+
     # Infer geometry from impulse responses
-    # geometry = atf.infer_geometry_ULA(impulse_responses)
+    # geometry = rtf.infer_geometry_ULA(impulse_responses)
     # print("Geometry: ", geometry)
 
     # # Visualize geometry in a 2D plot
     # plt.figure()
     # plt.scatter(geometry[:num_sources, 0], geometry[:num_sources, 1], label='Sources')
+    # # Highlight the last source in red
+    # plt.scatter(geometry[num_sources-1, 0], geometry[num_sources-1, 1], color='red')
     # plt.scatter(geometry[num_sources:, 0], geometry[num_sources:, 1], label='Microphones')
     # plt.xlabel('X')
     # plt.ylabel('Y')
@@ -188,60 +205,76 @@ def main():
     # plt.legend()
     # plt.show()
 
-    # Play the Original signal
-    play_audio_show_spectrum(combined_signal, sample_rate, play_volume=0.33)
-    input("Press Enter to continue...")
+    #     # Play the Original signal
+    # play_audio_show_spectrum(combined_signal, sample_rate, play_volume=0.33)
+    # input("Press Enter to continue...")
 
-    # Calculate a dealy-and-sum beamformer
+    # filtered_signal = bandpass_filter(combined_signal, lowcut=1000, highcut=6000, fs=sample_rate)
+
+    # # Play the Filtered signal
+    # play_audio_show_spectrum(filtered_signal, sample_rate, play_volume=0.33)
+    # input("Press Enter to continue...")
+
+    # ======================================== Delay-and-Sum Beamformer ========================================
+    # Calculate a delay-and-sum beamformer
     print("Calculating delay-and-sum beamformer...")
-    delay_and_sum_weights = beam_former.calculate_delay_and_sum_weights(atf_cheating)
+    delay_and_sum_weights = beam_former.calculate_delay_and_sum_weights(rtf_cheating)
 
     # Visualize the beamforming weights
-    #beam_former.calculate_output_SNR(delay_and_sum_weights, Rx, Rn)
-    #beam_former.visualize_beamforming_weights(delay_and_sum_weights)
-    #beam_former.visualize_beamforming_weights_polar(delay_and_sum_weights)
+    #intel_metric.calculate_output_SNR(delay_and_sum_weights, Rx, Rn)
+    #intel_metric.visualize_beamforming_weights(delay_and_sum_weights)
+    #intel_metric.visualize_beamforming_weights_polar(delay_and_sum_weights)
 
     # Apply the delay-and-sum beamformer to enhance the audio signal
     print("Applying delay-and-sum beamformer...")
     enhanced_signal_delay_and_sum = beam_former.apply_beamforming_weights(stft_mic_signals, delay_and_sum_weights)
 
+    stoi_score = intel_metric.calculate_stoi(clean_signal[:len(enhanced_signal_delay_and_sum)], enhanced_signal_delay_and_sum, sample_rate)
+    print(f"STOI Score of delay and sum: {stoi_score}")
+
     # Play the enhanced signal
     play_audio_show_spectrum(enhanced_signal_delay_and_sum, sample_rate)
     input("Press Enter to continue...")
     
+    # ======================================== Minimum Variance Distortionless Response (MVDR) ========================================
     # Calculate weigths for the MVDR beamformer
     print("Calculating MVDR beamformer...")
-    w_mvdr = beam_former.calculate_mvdr_weights(atf_cheating, Rn)
+    w_mvdr = beam_former.calculate_mvdr_weights(rtf_cheating, Rn)
     
     # Measure Visualize the beamforming weights
-    #beam_former.calculate_output_SNR(w_mvdr, Rx, Rn)
-    #beam_former.visualize_beamforming_weights(w_mvdr)
-    #beam_former.visualize_beamforming_weights_polar(w_mvdr)
+    #intel_metric.calculate_output_SNR(w_mvdr, Rx, Rn)
+    #intel_metric.visualize_beamforming_weights(w_mvdr)
+    #intel_metric.visualize_beamforming_weights_polar(w_mvdr)
 
     # Apply the MVDR beamformer to enhance the audio signal
     print("Applying MVDR beamformer...")
     enhanced_signal_mvdr = beam_former.apply_beamforming_weights(stft_mic_signals, w_mvdr)
 
+    stoi_score = intel_metric.calculate_stoi(clean_signal[:len(enhanced_signal_mvdr)], enhanced_signal_mvdr, sample_rate)
+    print(f"STOI Score of MVDR: {stoi_score}")
+
     # Play the enhanced signal
     play_audio_show_spectrum(enhanced_signal_mvdr, sample_rate)
     input("Press Enter to continue...")
 
-    # Apply the Multi-Channel Wiener
+    # ======================================== Multi-Channel Wiener Filter ========================================
+    # Calculate weigths for the Multi-Channel Wiener
     print("Calculating Multi-Channel Wiener beamformer...")
-    w_MCWiener = beam_former.calculate_Multi_channel_Wiener_weigths(atf_cheating, Rn, sig_var, w_mvdr)
-
-    # Visualize the beamforming weights
-    #beam_former.visualize_beamforming_weights(w_MCWiener)
-    #beam_former.visualize_beamforming_weights_polar(w_MCWiener)
+    w_MCWiener = beam_former.calculate_Multi_channel_Wiener_weigths(rtf_cheating, Rn, sig_var, w_mvdr)
 
     # Apply the Multi-Channel Wiener beamformer to enhance the audio signal
     print("Applying Multi-Channel Wiener beamformer...")
     enhanced_signal_MCWiener = beam_former.apply_beamforming_weights(stft_mic_signals, w_MCWiener)
     print("Enhanced signal (Multi-Channel Wiener Beamformer):", enhanced_signal_MCWiener)
 
+    stoi_score = intel_metric.calculate_stoi(clean_signal[:len(enhanced_signal_MCWiener)], enhanced_signal_MCWiener, sample_rate)
+    print(f"STOI Score of Multi-channel Wiener filter: {stoi_score}")
+
     # Play the enhanced signal
     play_audio_show_spectrum(enhanced_signal_MCWiener, sample_rate)
     input("Press Enter to continue...")
+
+    # ======================================== Comparison and Evaluation ========================================
 
     # Compare the results with the original signals
     print("Original microphone signals:", combined_signal)
@@ -255,12 +288,6 @@ def main():
     print("MSE (Delay-and-Sum Beamformer):", mse_delay_and_sum)
     print("MSE (MVDR Beamformer):", mse_mvdr)
     print("MSE (Wiener Filter):", mse_wiener_filter)
-
-    # Play the combined signal
-    play_audio_show_spectrum(combined_signal, sample_rate, play_volume=0.33)
-    input("Press Enter to continue...")
-
-    # TODO: Add code here to measure intelligibility and signal-to-noise ratio of the enhanced signals
 
 if __name__ == "__main__":
     main()
