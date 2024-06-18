@@ -58,8 +58,7 @@ function [ V , D ] =  joint_diag(A,jthresh)
 %----------------------------------------------------------------
 
 
-[m,nm] = size(A)
-
+[m,nm] = size(A);
 
 %% Better declare the variables used in the loop :
 B       = [ 1 0 0 ; 0 1 1 ; 0 -i i ] ;
@@ -88,17 +87,23 @@ while encore, encore=0;
 
  for p=1:m-1, Ip = p:m:nm ;
  for q=p+1:m, Iq = q:m:nm ;
-
+ 
 	%% Computing the Givens angles
         g       = [ A(p,Ip)-A(q,Iq)  ; A(p,Iq) ; A(q,Ip) ] ; 
+        g
+        real(B*(g*g')*Bt)
         [vcp,D] = eig(real(B*(g*g')*Bt));
-        "vcp shape"
         vcp
+        diag(D)
         [la, K] = sort(diag(D));
         angles  = vcp(:,K(3));
+        K
+        angles
 	if angles(1)<0 , angles= -angles ; end ;
         c       = sqrt(0.5+angles(1)/2);
-        s       = 0.5*(angles(2)-j*angles(3))/c; 
+        s       = 0.5*(angles(2)-j*angles(3))/c;
+        c
+        s
 
         if abs(s)>jthresh, %%% updates matrices A and V by a Givens rotation
                 encore          = 1 ;
@@ -107,8 +112,15 @@ while encore, encore=0;
                 V(:,pair)       = V(:,pair)*G ;
                 A(pair,:)       = G' * A(pair,:) ;
                 A(:,[Ip Iq])    = [ c*A(:,Ip)+s*A(:,Iq) -conj(s)*A(:,Ip)+c*A(:,Iq) ] ;
+                encore
+                pair
+                G
+                display(V(:, pair))
+                display(A(pair, :))
+                display(A(:,[Ip Iq]))
 
    end%% if
+   encore
   end%% q loop
  end%% p loop
 end%% while

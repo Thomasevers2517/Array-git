@@ -22,15 +22,15 @@ def joint_diag(A, jthresh=1.0e-8):
     m, nm = A.shape
 
     # Better declare the variables used in the loop
-    B = np.array([[1, 0, 0], [0, 1, 1], [0, -1j, 1j]])
-    Bt = B.T
+    B = np.array([[1, 0, 0], [0, 1, 1], [0, -1j, 1j]], dtype=complex)
+    Bt = B.conj().T
     g = np.zeros((3, nm), dtype=complex)
     G = np.zeros((2, 2), dtype=complex)
     vcp = np.zeros((3, 3), dtype=complex)
     D = np.zeros((3, 3), dtype=complex)
-    la = np.zeros(3)
-    angles = np.zeros(3)
-    pair = np.zeros(2, dtype=int)
+    la = np.zeros(3, dtype=complex)
+    angles = np.zeros(3, dtype=complex)
+    pair = np.zeros(2, dtype=complex)
 
     # Init
     V = np.eye(m, dtype=complex)
@@ -45,16 +45,15 @@ def joint_diag(A, jthresh=1.0e-8):
 
                 # Computing the Givens angles
                 g = np.vstack((A[p, Ip] - A[q, Iq], A[p, Iq], A[q, Ip]))
+
                 D, vcp = eig(np.real(B @ (g @ g.conj().T) @ Bt), right=True)
-                # print("vcp: ", vcp)
-                # print("D: ", D)
+
                 diag_D = np.diag(D)
                 la = np.sort(D)
                 K = np.argsort(D)
-                # print("la: ", la)
-                # print("K: ", K)
                 
                 angles = vcp[:, K[2]]
+
                 if angles[0] < 0:
                     angles = -angles
                 c = np.sqrt(0.5 + angles[0] / 2)
@@ -67,20 +66,7 @@ def joint_diag(A, jthresh=1.0e-8):
                     V[:, pair] = V[:, pair] @ G
                     A[pair, :] = G.conj().T @ A[pair, :]
                     A[:, np.hstack((Ip, Iq))] = np.hstack((c * A[:, Ip] + s * A[:, Iq], -np.conj(s) * A[:, Ip] + c * A[:, Iq]))
-
+                    
     D = A
 
     return V, D
-
-# Example usage
-if __name__ == "__main__":
-    # Example matrices A1, A2, ... concatenated in A
-    m = 3
-    n = 2
-    A1 = np.random.rand(m, m) + 1j * np.random.rand(m, m)
-    A2 = np.random.rand(m, m) + 1j * np.random.rand(m, m)
-    A = np.hstack((A1, A2))
-    
-    V, D = joint_diag(A)
-    print("V:", V)
-    print("D:", D)
