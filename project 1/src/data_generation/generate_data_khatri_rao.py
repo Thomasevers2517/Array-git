@@ -1,13 +1,12 @@
 import numpy as np
 import scipy as sp
-def generate_data_khatri_rao(M=3, N=500, theta_degrees=[30, 50], f = [0.005, 0.002], snr_db=[100, 100], m=5):
+def generate_data_khatri_rao(M=3, N=500, theta_degrees=[30, 50], f = [0.005, 0.002], snr_db=[100, 100], m=5, P = 60, delta = 0.2):
     d = len(theta_degrees)
-    P = 60
+    
     f = np.array(f)
     theta = np.array(np.deg2rad(theta_degrees))
     snr_db = np.array(snr_db)
-    delta = 0.2
-    
+    snr = 10**(snr_db/10)
     assert all(f < P/2) and all(f > -P/2), "f*Fs should be less than P/2 and greater than 0"
     
     phi = np.exp(1j*2*np.pi*f/P)
@@ -39,19 +38,17 @@ def generate_data_khatri_rao(M=3, N=500, theta_degrees=[30, 50], f = [0.005, 0.0
     
     S = np.ones((d, N))
     
+    noise = np.random.randn(d, N) + 1j*np.random.randn(d, N)
+    noise = (noise/np.abs(noise))
+
+    noise[0, :] = noise[0, :] / np.sqrt(snr[0])
+    noise[1, :] = noise[1, :] / np.sqrt(snr[1])
+    
+    S = S + noise
 
     for i in range(d):
         PHI[i, i] = phi[i]
     
-    print("F_phi: ", F_phi.shape)
-    print("A_theta: ", A_theta.shape)
-    print("sp.linalg.khatri_rao(F_phi, A_theta)", sp.linalg.khatri_rao(F_phi, A_theta).shape)
-    print("B: ", B.shape)
-    print("F_p: ", F_p.shape)
-    print("S: ", S.shape)
-    
     X = sp.linalg.khatri_rao(F_phi, A_theta) @ B @ np.multiply(F_p, S)
- 
-    
-    print("X: ", X.shape)
+
     return X

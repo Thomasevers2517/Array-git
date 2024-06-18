@@ -1,5 +1,5 @@
 import numpy as np
-def generate_data(M=3, N=500, distance=0.2, theta_degrees=[30, 50], f = [0.005, 0.002], snr_db=[100, 100], Fs = 1000000):
+def generate_data(M=3, N=500, theta_degrees=[30, 50], f = [0.005, 0.002], snr_db=[100, 100], delta = 0.5):
     """Generates data for the given parameters
     Parameters
     ----------
@@ -31,7 +31,6 @@ def generate_data(M=3, N=500, distance=0.2, theta_degrees=[30, 50], f = [0.005, 
     snr = np.power(10, np.array(snr_db)/10)
     assert M > 0, "Number of antennas should be greater than 0"
     assert N > 0, "Number of samples should be greater than 0"
-    assert distance > 0, "Time delay between antennas should be greater than 0"
     assert len(theta) > 0, "List of angles of arrival of sources should be greater than 0"
     assert len(f) ==len(theta), "List of frequencies of sources should be equal to the number of sources"
     assert len(snr) == len(theta), "List of signal to noise ratios for sources should be equal to the number of sources"
@@ -43,7 +42,8 @@ def generate_data(M=3, N=500, distance=0.2, theta_degrees=[30, 50], f = [0.005, 
     print("num antennas (M): ", M)
     print("num samples (N): ", N)
     print("num sources (d): ", len(theta))
-    print("distance: ", distance)
+    print("snr: ", snr)
+    print("delta: ", delta)
     print("theta: ", theta)
     print ("f: ", f)
 
@@ -54,7 +54,7 @@ def generate_data(M=3, N=500, distance=0.2, theta_degrees=[30, 50], f = [0.005, 
     X = np.zeros((M, N), dtype=complex)
     TAU =  np.zeros((M, d, N), dtype=complex) #antennas, sources, time
     print("ANGLE: ", np.sin(np.deg2rad(theta)))
-    TAU[0, :, :] = np.repeat(np.array( np.exp(1j* (2*np.pi * distance * f * Fs /c * np.sin(theta)))), N).reshape(d, N)
+    TAU[0, :, :] = np.repeat(np.array( np.exp(1j* (2*np.pi * delta  * np.sin(theta)))), N).reshape(d, N)
     S = np.zeros((d, N), dtype=complex)
     
     for m in range(1,M):
