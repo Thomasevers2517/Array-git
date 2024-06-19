@@ -18,11 +18,10 @@ delta = 0.5
 freqs = np.array([0.1, 0.12])
 angles = np.array([-20, 30])
 
-snr =1000
+snr =10
 
 
-X_normal, S_with_car, A, _ = generate_data(M=M, N=N, theta_degrees=angles, f=freqs, snr_db=[snr,snr], delta=delta)
-
+X_normal, S_with_car, A, Noise = generate_data(M=M, N=N, theta_degrees=angles, f=freqs, snr_db=[snr,snr], delta=delta)
 
 if not np.array_equal(X_normal, A @ S_with_car):
     raise ValueError("X_normal is not equal to A @ S_with_car")
@@ -33,13 +32,14 @@ def bf_angle(X, d, delta):
     print("Predicted angles: ", pred_angle)
 
     phi = np.array( np.exp(1j* (2*np.pi * delta  *  np.sin(np.deg2rad(pred_angle)))))
-    A = np.zeros((M, d), dtype=complex) 
-    A[ 0, :] = np.ones(d)
+    A_est_angle = np.zeros((M, d), dtype=complex) 
+    A_est_angle[ 0, :] = np.ones(d)
     for m in range(1,M):
-        A[m, :] = A[m-1, :] * phi
+        A_est_angle[m, :] = A_est_angle[m-1, :] * phi
         
-    W_angle = A @ np.linalg.pinv(A.conj().T @ A)
+    W_angle = A_est_angle @ np.linalg.pinv(A_est_angle.conj().T @ A_est_angle)
     return W_angle
+
 def bf_freq(X, d, m, N):
     pred_freq = espirit_freq(X, d, 1)
 
@@ -56,20 +56,42 @@ def bf_freq(X, d, m, N):
 
     W_freq = A_est_freq @ np.linalg.pinv(A_est_freq.conj().T @ A_est_freq)
     return W_freq
+
 W_angle = bf_angle(X_normal, d, delta)
 S_est_angle =  W_angle.conj().T @ X_normal
 W_freq = bf_freq(X_normal, d, m, N)
 S_est_freq2 = W_freq.conj().T @ X_normal
 
+
+def a(theta_degrees):
+    a = np.zeros((M), dtype=complex)
+    a[0] = 1
+    phi = np.exp(1j * 2 * np.pi * delta * np.sin(np.deg2rad(theta_degrees)))
+    for m in range(1,M):
+        a[m] = a[m-1] * phi
+    return a
+def plot_beam_pattern(W, label):
+    y = []
+    for theta in range(-90, 90):
+        result =np.dot(W.conj().T,  a(theta))
+        y.append(abs(result))
+    plt.plot(range(-90, 90), y, label=label)
+    
+    
+    
+
 plt.figure()
-plt.plot(S_with_car[0, :], label='Source 1')
-plt.plot(S_with_car[1, :], label='Source 2')
-plt.plot(S_est_angle[0, :], label='Estimated Source 1')
-plt.plot(S_est_angle[1, :], label='Estimated Source 2')
-plt.plot(S_est_freq2[0, :], label='Estimated Source 1 Freq')
-plt.plot(S_est_freq2[1, :], label='Estimated Source 2 Freq')
-plt.ylabel('Amplitude')
-plt.xlabel('Time')
-plt.title('Source and Estimated Source Signals')
+
+plot_beam_pattern(W_angle[:,0], 'Angle of arrival est 1')
+plot_beam_pattern(W_angle[:,1], 'Angle of arrival est 2')
+plot_beam_pattern(W_freq[:,0], 'Freq of arrival est 1')
+plot_beam_pattern(W_freq[:,1], 'Freq of arrival est 2')
+est_angles = espirit(X_normal, d, delta)
+for i in range(d):
+    plt.axvline(est_angles[i], 0, color='r', linestyle='--')
+plt.xlabel('Angle')
+plt.ylabel('Magnitude')
+plt.title('Beam Pattern')
 plt.legend()
 plt.show()
+

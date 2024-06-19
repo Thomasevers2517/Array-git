@@ -9,7 +9,7 @@ def generate_data(M=3, N=500, theta_degrees=[30, 50], f = [0.005, 0.002], snr_db
         Number of samples
         delta : float
         Time delay between antennas
-        theta_degrees : list
+        theta_rad_degrees : list
         List of angles of arrival of sources between -180 and 180 degrees
         f : list
         List of normalized frequencies of sources, should be between 0 and 1
@@ -26,53 +26,57 @@ def generate_data(M=3, N=500, theta_degrees=[30, 50], f = [0.005, 0.002], snr_db
         NOISE : numpy.ndarray
         Matrix of noise
         """
-    theta = np.deg2rad(theta_degrees)
-    print("theta: ", theta)
+    theta_rad = np.deg2rad(theta_degrees)
+    print("theta_rad: ", theta_rad)
     snr = np.power(10, np.array(snr_db)/10)
     assert M > 0, "Number of antennas should be greater than 0"
     assert N > 0, "Number of samples should be greater than 0"
-    assert len(theta) > 0, "List of angles of arrival of sources should be greater than 0"
-    assert len(f) ==len(theta), "List of frequencies of sources should be equal to the number of sources"
-    assert len(snr) == len(theta), "List of signal to noise ratios for sources should be equal to the number of sources"
+    assert len(theta_rad) > 0, "List of angles of arrival of sources should be greater than 0"
+    assert len(f) ==len(theta_rad), "List of frequencies of sources should be equal to the number of sources"
+    assert len(snr) == len(theta_rad), "List of signal to noise ratios for sources should be equal to the number of sources"
     assert all(isinstance(i, int) for i in [M, N]), "Number of antennas and number of samples should be integers"
-    assert all(theta[i] >= -np.pi and theta[i] <= np.pi for i in range(len(theta))), "Angles of arrival of sources should be between -pi and pi"
+    assert all(theta_rad[i] >= -np.pi and theta_rad[i] <= np.pi for i in range(len(theta_rad))), "Angles of arrival of sources should be between -pi and pi"
     
     
     print("Generating data with the following parameters:")
     print("num antennas (M): ", M)
     print("num samples (N): ", N)
-    print("num sources (d): ", len(theta))
+    print("num sources (d): ", len(theta_rad))
     print("snr: ", snr)
     print("delta: ", delta)
-    print("theta: ", theta)
+    print("theta_rad: ", theta_rad)
     print ("f: ", f)
 
-    d= len(theta)
+    d= len(theta_rad)
     c = 343
-    theta = np.array(theta)
-    f = np.array(f)
+
+
     X = np.zeros((M, N), dtype=complex)
-    TAU =  np.zeros((M, d, N), dtype=complex) #antennas, sources, time
-    print("ANGLE: ", np.sin(np.deg2rad(theta)))
-    TAU[0, :, :] = np.repeat(np.array( np.exp(1j* (2*np.pi * delta  * np.sin(theta)))), N).reshape(d, N)
-    S = np.zeros((d, N), dtype=complex)
+    A =  np.zeros((M, d), dtype=complex) #antennas, sources, time
+    print("ANGLE: ", np.sin(theta_rad))
     
+    phi = np.array( np.exp(1j* (2*np.pi * delta  *  np.sin(theta_rad))))
+    A[ 0, :] = np.ones(d)
     for m in range(1,M):
-        TAU[m, :, :] = TAU[m-1, :, :] * TAU[0, :, :]
+        A[m, :] = A[m-1, :] * phi
     
     # Create a 3D array to hold the noise
-    NOISE = np.zeros((M, d, N), dtype=complex)
+    NOISE = np.zeros((d, N), dtype=complex)
 
     # Generate the noise for each source
     for i in range(d):
-        NOISE[:, i, :] = np.random.normal(0, 1/(np.sqrt(snr[i])), (M, N))
+        NOISE[i,:] = np.random.normal(0, 1/(np.sqrt(snr[i])), (N))
     
-    TAU = TAU + NOISE
+    
+    S = np.ones((d, N), dtype=complex)
+    S[0, :] = 1/np.sqrt(2) + 1j/np.sqrt(2)
+    # S[:, int(N/2):] = 1/np.sqrt(2) + 1j/np.sqrt(2)
+    S_withcar = np.zeros((d, N), dtype=complex)
     for i in range(d):
-        S[i, :] = np.exp(1j *2 * np.pi * f[i] * np.arange(N))
+        S_withcar[i, :] = np.exp(1j *2 * np.pi * f[i] * np.arange(N)) * (S[i, :]) + NOISE[i, :]
         
-    for N in range(N):
-        X[:, N] = TAU[:, :, N] @ S[:, N] 
+    
+    X = A @ S_withcar
     print("data generated successfully")
 
-    return X, S, TAU, NOISE
+    return X, S_withcar, A, NOISE
