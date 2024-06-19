@@ -32,19 +32,15 @@ import pygame
 from pygame.locals import *
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 import queue
+from scipy.signal import butter, lfilter
 
 import src.load_audio as load_audio
 import src.beam_former as beam_former
-import src.atf as atf
+import src.rtf as rtf
+import src.intel_metric as intel_metric
 
 # Create a queue to hold the data
 data_queue = queue.Queue()
-
-# Constants
-NUM_OF_MIC = 4
-NUM_OF_SRC = 5
-STFT_WINDOW_TIME = 0.02 #seconds
-NOISE_STD_DEV = 1
 
 class PlayerThread(threading.Thread):
     def __init__(self, audio_data, sample_rate, volume=1.0):
@@ -147,38 +143,82 @@ def play_audio_show_spectrum(audio_data, sample_rate, play_volume=0.33):
     # Close the Pygame window
     pygame.quit()
 
+def bandpass_filter(signal, lowcut, highcut, fs, order=5):
+    # Normalize the frequencies
+    nyq = 0.5 * fs
+    low = lowcut / nyq
+    high = highcut / nyq
+
+    # Design the Butterworth filter
+    b, a = butter(order, [low, high], btype='band')
+
+    # Apply the filter
+    filtered_signal = lfilter(b, a, signal)
+
+    return filtered_signal
+
+def eval_metrics(source_signal, enhanced_signal, sample_rate):
+    stoi_score = np.round(intel_metric.calculate_stoi(source_signal[:len(enhanced_signal)], enhanced_signal, sample_rate), 2)
+    estoi_score = np.round(intel_metric.calculate_estoi(source_signal[:len(enhanced_signal)], enhanced_signal, sample_rate), 2)
+    siib_score = 0 #np.round(intel_metric.compute_siib(source_signal[:len(enhanced_signal)], enhanced_signal, sample_rate), 2)
+    ncm_score = np.round(intel_metric.calculate_ncm(source_signal[:len(enhanced_signal)], enhanced_signal), 2)
+    return stoi_score, estoi_score, siib_score, ncm_score
+
 def main():
     # Initialize Pygame
     pygame.init()
 
-    # Load audio data
-    num_sources, num_mics, sample_rate, mic_signals, path_signals = load_audio.convolve_audio_sources(data_folder="src/data/")
+    # ======================================== Load Audio Data ========================================
+    impulse_responses, num_sources, num_mics, sample_rate, mic_signals, source_signal, path_signals = load_audio.convolve_audio_sources(data_folder="src/data/")
     
+    # ======================================== Audio preprocessing ========================================
+
     # Add all the signals from the microphones with equal weigths to create the combined signal
     combined_signal = np.zeros_like(mic_signals[0])
-    for i in range(0, NUM_OF_MIC):
+    for i in range(0, num_mics):
         combined_signal += mic_signals[i]
-    combined_signal = combined_signal / NUM_OF_MIC
+    combined_signal = combined_signal / num_mics
 
-    # Determine the relative transfer function (RTF) for each microphone
-    # atf_cheating, Rx, Rn, sig_var, stft_mic_signals = atf.determine_atf_a_priori(num_sources, num_mics, path_signals)
-    # print("atf_cheating.shape: ", atf_cheating.shape)
+    # Measure the threshold for source precense using the source signal
+    # plot the audio sample in time domain
+    plt.figure()
+    plt.plot(source_signal)
+    plt.title('Source Signal')
+    plt.xlabel('Time')
+    plt.ylabel('Amplitude')
+    plt.grid()
+    plt.show()
+
+    # Metric
+    stoi_score, estoi_score, siib_score, ncm_score = eval_metrics(source_signal, combined_signal, sample_rate)
+    print("combined_signal scores: STOI: ", stoi_score, " ESTOI: ", estoi_score, " SIIB: ", siib_score, " NCM: ", ncm_score)
+
+    # Filter the combined signal
+    filtered_signal = bandpass_filter(combined_signal, lowcut=1000, highcut=6000, fs=sample_rate)
     
-    # Estimate the relative transfer function (RTF) for each microphone using prewhitening
-    rtf_estimated_prewhiten, Rx, Rn, sig_var, stft_mic_signals = atf.estimate_rtf_prewhiten(num_mics, mic_signals)
-    print("rtf_estimated_prewhiten: ", rtf_estimated_prewhiten)
+    # Metric
+    stoi_score, estoi_score, siib_score, ncm_score = eval_metrics(source_signal, filtered_signal, sample_rate)
+    print("filtered_signal scores: STOI: ", stoi_score, " ESTOI: ", estoi_score, " SIIB: ", siib_score, " NCM: ", ncm_score)
 
-    # # Estimate the relative transfer function (RTF) for each microphone using generalized eigenvalue decomposition (GEVD)
-    # rtf_estimated_GEVD = atf.estimate_rtf_GEVD(impulse_responses)
-    # print("rtf_estimated_GEVD: ", rtf_estimated_GEVD)
+    # ======================================== Relative Transfer Function (RTF) ========================================
+    # Determine the relative transfer function (RTF) for each microphone
+    # rtf_cheating, Rn, sig_var, stft_mic_signals = rtf.determine_rtf_a_priori_CPSD(mic_signals, path_signals)  
+    
+    #  Estimate the relative transfer function (RTF) for each microphone using prewhitening
+    rtf_estimated_prewhiten, Rn, sig_var, stft_mic_signals = rtf.estimate_rtf_prewhiten(mic_signals, path_signals)
+
+    #  Estimate the relative transfer function (RTF) for each microphone using GEVD
+    #rtf_estimated_GEVD, Rn, sig_var, stft_mic_signals = rtf.estimate_rtf_GEVD(mic_signals, path_signals)
 
     # Infer geometry from impulse responses
-    # geometry = atf.infer_geometry_ULA(impulse_responses)
+    # geometry = rtf.infer_geometry_ULA(impulse_responses)
     # print("Geometry: ", geometry)
 
     # # Visualize geometry in a 2D plot
     # plt.figure()
     # plt.scatter(geometry[:num_sources, 0], geometry[:num_sources, 1], label='Sources')
+    # # Highlight the last source in red
+    # plt.scatter(geometry[num_sources-1, 0], geometry[num_sources-1, 1], color='red')
     # plt.scatter(geometry[num_sources:, 0], geometry[num_sources:, 1], label='Microphones')
     # plt.xlabel('X')
     # plt.ylabel('Y')
@@ -186,80 +226,80 @@ def main():
     # plt.legend()
     # plt.show()
 
-    # Play the Original signal
-    play_audio_show_spectrum(combined_signal, sample_rate, play_volume=0.33)
-    input("Press Enter to continue...")
+    # ======================================== Delay-and-Sum Beamformer ========================================
+    # # Calculate a delay-and-sum beamformer
+    # print("Calculating delay-and-sum beamformer...")
+    # delay_and_sum_weights = beam_former.calculate_delay_and_sum_weights(rtf_estimated_prewhiten)
 
-    # Calculate a dealy-and-sum beamformer
-    print("Calculating delay-and-sum beamformer...")
-    delay_and_sum_weights = beam_former.calculate_delay_and_sum_weights(rtf_estimated_prewhiten)
+    # # Apply the delay-and-sum beamformer to enhance the audio signal
+    # print("Applying delay-and-sum beamformer...")
+    # enhanced_signal_delay_and_sum = beam_former.apply_beamforming_weights(stft_mic_signals, delay_and_sum_weights)
 
-    # Visualize the beamforming weights
-    #beam_former.calculate_output_SNR(delay_and_sum_weights, Rx, Rn)
-    #beam_former.visualize_beamforming_weights(delay_and_sum_weights)
-    #beam_former.visualize_beamforming_weights_polar(delay_and_sum_weights)
+    # # Metric
+    # stoi_score, estoi_score, siib_score, ncm_score = eval_metrics(source_signal, enhanced_signal_delay_and_sum, sample_rate)
+    # print("Delay-and-Sum scores: STOI: ", stoi_score, " ESTOI: ", estoi_score, " SIIB: ", siib_score, " NCM: ", ncm_score)
 
-    # Apply the delay-and-sum beamformer to enhance the audio signal
-    print("Applying delay-and-sum beamformer...")
-    enhanced_signal_delay_and_sum = beam_former.apply_beamforming_weights(stft_mic_signals, delay_and_sum_weights)
-
-    # Play the enhanced signal
-    play_audio_show_spectrum(enhanced_signal_delay_and_sum, sample_rate)
-    input("Press Enter to continue...")
+    # # Play the enhanced signal
+    # play_audio_show_spectrum(enhanced_signal_delay_and_sum, sample_rate)
+    # input("Press Enter to continue...")
     
+    # ======================================== Minimum Variance Distortionless Response (MVDR) ========================================
     # Calculate weigths for the MVDR beamformer
     print("Calculating MVDR beamformer...")
     w_mvdr = beam_former.calculate_mvdr_weights(rtf_estimated_prewhiten, Rn)
-    
-    # Measure Visualize the beamforming weights
-    #beam_former.calculate_output_SNR(w_mvdr, Rx, Rn)
-    #beam_former.visualize_beamforming_weights(w_mvdr)
-    #beam_former.visualize_beamforming_weights_polar(w_mvdr)
 
     # Apply the MVDR beamformer to enhance the audio signal
     print("Applying MVDR beamformer...")
     enhanced_signal_mvdr = beam_former.apply_beamforming_weights(stft_mic_signals, w_mvdr)
-    print("Enhanced signal (MVDR Beamformer):", enhanced_signal_mvdr)
 
-    # Play the enhanced signal
-    play_audio_show_spectrum(enhanced_signal_mvdr, sample_rate)
-    input("Press Enter to continue...")
+    # Metric
+    stoi_score, estoi_score, siib_score, ncm_score = eval_metrics(source_signal, enhanced_signal_mvdr, sample_rate)
+    print("MVDR scores: STOI: ", stoi_score, " ESTOI: ", estoi_score, " SIIB: ", siib_score, " NCM: ", ncm_score)
 
-    # Apply the Multi-Channel Wiener
+    # # Play the enhanced signal
+    # play_audio_show_spectrum(enhanced_signal_mvdr, sample_rate)
+    # input("Press Enter to continue...")
+
+    # ======================================== Multi-Channel Wiener Filter ========================================
+    # Calculate weigths for the Multi-Channel Wiener
     print("Calculating Multi-Channel Wiener beamformer...")
     w_MCWiener = beam_former.calculate_Multi_channel_Wiener_weigths(rtf_estimated_prewhiten, Rn, sig_var, w_mvdr)
-
-    # Visualize the beamforming weights
-    #beam_former.visualize_beamforming_weights(w_MCWiener)
-    #beam_former.visualize_beamforming_weights_polar(w_MCWiener)
 
     # Apply the Multi-Channel Wiener beamformer to enhance the audio signal
     print("Applying Multi-Channel Wiener beamformer...")
     enhanced_signal_MCWiener = beam_former.apply_beamforming_weights(stft_mic_signals, w_MCWiener)
     print("Enhanced signal (Multi-Channel Wiener Beamformer):", enhanced_signal_MCWiener)
 
-    # Play the enhanced signal
-    play_audio_show_spectrum(enhanced_signal_MCWiener, sample_rate)
-    input("Press Enter to continue...")
+    # Metric
+    stoi_score, estoi_score, siib_score, ncm_score = eval_metrics(source_signal, enhanced_signal_MCWiener, sample_rate)
+    print("Multi-Channel Wiener scores: STOI: ", stoi_score, " ESTOI: ", estoi_score, " SIIB: ", siib_score, " NCM: ", ncm_score)
 
-    # Compare the results with the original signals
-    print("Original microphone signals:", combined_signal)
-    
-    # Calculate the mean squared error (MSE) between the original and enhanced signals
-    mse_delay_and_sum = np.mean((enhanced_signal_delay_and_sum[:len(combined_signal)] - combined_signal)**2)
-    mse_mvdr = np.mean((enhanced_signal_mvdr[:len(combined_signal)] - combined_signal)**2)
-    mse_wiener_filter = np.mean((enhanced_signal_MCWiener[:len(combined_signal)] - combined_signal)**2)
-    
-    # Print the results
-    print("MSE (Delay-and-Sum Beamformer):", mse_delay_and_sum)
-    print("MSE (MVDR Beamformer):", mse_mvdr)
-    print("MSE (Wiener Filter):", mse_wiener_filter)
+    # # Play the enhanced signal
+    # play_audio_show_spectrum(enhanced_signal_MCWiener, sample_rate)
 
-    # Play the combined signal
-    play_audio_show_spectrum(combined_signal, sample_rate, play_volume=0.33)
-    input("Press Enter to continue...")
+    # ======================================== Comparison and Evaluation ========================================
+    # # Compare the enhanced signals with the original microphone signals
+    # print("Comparing the enhanced signals with the original microphone signals...")
+    # # Plot the original microphone signals
+    # plt.figure()
+    # for i in range(num_mics):
+    #     plt.plot(np.abs(stft_mic_signals[i, 0, :]), label=f'Microphone {i+1}')
+    # plt.xlabel('Time')
+    # plt.ylabel('Magnitude')
+    # plt.title('Original Microphone Signals')
+    # plt.legend()
+    # plt.show()
 
-    # TODO: Add code here to measure intelligibility and signal-to-noise ratio of the enhanced signals
+    # # Plot the enhanced signals
+    # plt.figure()
+    # plt.plot(np.abs(enhanced_signal_delay_and_sum), label='Delay-and-Sum')
+    # plt.plot(np.abs(enhanced_signal_mvdr), label='MVDR')
+    # plt.plot(np.abs(enhanced_signal_MCWiener), label='Multi-Channel Wiener')
+    # plt.xlabel('Time')
+    # plt.ylabel('Magnitude')
+    # plt.title('Enhanced Signals')
+    # plt.legend()
+    # plt.show()
 
 if __name__ == "__main__":
     main()

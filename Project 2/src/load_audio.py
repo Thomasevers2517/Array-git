@@ -4,6 +4,14 @@ import scipy.signal as signal
 import soundfile as sf 
 import matplotlib.pyplot as plt
 
+# STFT specs
+N_PER_SEG = 400
+N_OVERLAP = 200
+SAMPLE_FREQ = 16000
+STFT_WINDOW = 'hann'
+STFT_TIME = N_PER_SEG/SAMPLE_FREQ
+STFT_OVERLAP = STFT_TIME/2
+
 def show_spectrum(audio_signal, sample_rate=16000):
     # Compute the frequency spectrum of the audio signal
     freq_spectrum = np.fft.fft(audio_signal)
@@ -44,22 +52,30 @@ def convolve_audio_sources(data_folder ="data/"):
     wav_file_5 = data_folder + "clean_speech.wav"
     wav_file_paths = [wav_file_1, wav_file_2, wav_file_3, wav_file_4, wav_file_5]
     
-    mat_file_path= data_folder + "impulse_responses.mat"
+    mat_file_path = data_folder + "impulse_responses.mat"
 
     # Load impulse responses from .mat file
     print("Loading impulse responses from .mat file...")
     impulse_responses = load_mat_file(mat_file_path) 
+
+    # Find the minimum length of the audio signals
+    min_length = (SAMPLE_FREQ * 5) + 800  # hard coded to the minimum length of the signals, approx 5 seconds, and fits the STFT settings
+    print("Truncated length of audio signals: ", min_length)
 
     # Calculate the number of sources and microphones
     num_sources = impulse_responses.shape[0]
     num_mics = impulse_responses.shape[1]
     print("Number of sources: ", num_sources)
     print("Number of microphones: ", num_mics)
+    
+    # Initialize the combined signals, path signals and clean signals
+    combined_signals = np.array([None] * num_mics)
+    path_signals = np.array([[None] * num_mics] * num_sources)
+    source_signal = np.array([None] * num_mics)
 
     # Convolve audio sources with impulse responses
     print("Convolving audio sources with impulse responses...")
-    combined_signals = [None] * num_mics
-    path_signals = [[None] * num_mics] * num_sources
+
     max_amplitude = 0
     for source_idx in range(num_sources):
         wav_file_path = wav_file_paths[source_idx]
@@ -70,17 +86,14 @@ def convolve_audio_sources(data_folder ="data/"):
             impulse_response = impulse_responses[source_idx, mic_idx]
             convolved_signal = convolve_signal(signal_data, impulse_response)
             mic_signals[mic_idx] = convolved_signal
-            
+            path_signals[source_idx][mic_idx] = convolved_signal[:min_length]
+    
             if combined_signals[mic_idx] is None:
                 combined_signals[mic_idx] = convolved_signal
-                path_signals[source_idx][mic_idx] = convolved_signal
             else:
                 # Truncate to the length of the samples to save on computation time
-                min_length = min(len(convolved_signal), len(combined_signals[mic_idx]))
-                min_length = 82560 # hard coded to the minimum length of the signals, approx 5 seconds
                 shaped_combined_signals = combined_signals[mic_idx][:min_length]
                 shaped_convolved_signal = convolved_signal[:min_length]
-                path_signals[source_idx][mic_idx] = shaped_convolved_signal
                 
                 # Now you can add the signals together
                 combined_signals[mic_idx] = np.sum([shaped_convolved_signal, shaped_combined_signals], axis=0)
@@ -88,14 +101,22 @@ def convolve_audio_sources(data_folder ="data/"):
                 # Find the maximum sound amplitude over alle signals and mics
                 max_amplitude_in_signal = np.max(combined_signals[mic_idx])
                 max_amplitude = max(max_amplitude, max_amplitude_in_signal)
-    
-    # Normalize the combined signals to the maximum amplitude
-    print("Normalizing combined signals and path signals...")
-    print("Normalization gain: ", 1/max_amplitude)
-    combined_signals = combined_signals / max_amplitude
-    path_signals = np.array(path_signals) / max_amplitude
 
-    return num_sources, num_mics, sample_rate, combined_signals, path_signals
+    # Normalize the combined signals to the maximum amplitude
+    # print("Normalizing combined signals and path signals...")
+    # print("Normalization gain: ", 1/max_amplitude)
+    
+    # Gain the signals to with 1e6 
+    for mic_idx in range(num_mics):
+        for source_idx in range(num_sources):
+            path_signals[source_idx][mic_idx] = path_signals[source_idx][mic_idx] * 1e3 # / max_amplitude
+        combined_signals[mic_idx] = combined_signals[mic_idx] * 1e3 # / max_amplitude
+          
+    # return clean speech to be used as reference signal
+    for mic_idx in range(num_mics):
+        source_signal = path_signals[4][mic_idx] * 1e3 # / max_amplitude
+
+    return impulse_responses, num_sources, num_mics, sample_rate, combined_signals, source_signal, path_signals
 
 if __name__ == "__main__":
     try:
