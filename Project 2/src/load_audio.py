@@ -67,11 +67,15 @@ def convolve_audio_sources(data_folder ="data/"):
     num_mics = impulse_responses.shape[1]
     print("Number of sources: ", num_sources)
     print("Number of microphones: ", num_mics)
+    
+    # Initialize the combined signals, path signals and clean signals
+    combined_signals = np.array([None] * num_mics)
+    path_signals = np.array([[None] * num_mics] * num_sources)
+    clean_signal = np.array([None] * num_mics)
 
     # Convolve audio sources with impulse responses
     print("Convolving audio sources with impulse responses...")
-    combined_signals = np.array([None] * num_mics)
-    path_signals = np.array([[None] * num_mics] * num_sources)
+
     max_amplitude = 0
     for source_idx in range(num_sources):
         wav_file_path = wav_file_paths[source_idx]
@@ -99,15 +103,18 @@ def convolve_audio_sources(data_folder ="data/"):
                 max_amplitude = max(max_amplitude, max_amplitude_in_signal)
 
     # Normalize the combined signals to the maximum amplitude
-    print("Normalizing combined signals and path signals...")
-    print("Normalization gain: ", 1/max_amplitude)
+    # print("Normalizing combined signals and path signals...")
+    # print("Normalization gain: ", 1/max_amplitude)
+    
+    # Gain the signals to with 1e6 
     for mic_idx in range(num_mics):
         for source_idx in range(num_sources):
-            path_signals[source_idx][mic_idx] = path_signals[source_idx][mic_idx] / max_amplitude
-        combined_signals[mic_idx] = combined_signals[mic_idx] / max_amplitude
-    
-    # return clean speach aswell
-    clean_signal, sample_rate = load_wav_file(wav_file_5)
+            path_signals[source_idx][mic_idx] = path_signals[source_idx][mic_idx] * 1e3 # / max_amplitude
+        combined_signals[mic_idx] = combined_signals[mic_idx] * 1e3 # / max_amplitude
+          
+    # return clean speech to be used as reference signal
+    for mic_idx in range(num_mics):
+        clean_signal = path_signals[4][mic_idx] * 1e3 # / max_amplitude
 
     return impulse_responses, num_sources, num_mics, sample_rate, combined_signals, clean_signal, path_signals
 

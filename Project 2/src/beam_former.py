@@ -22,8 +22,7 @@ def apply_beamforming_weights(stft_mic_signals, beamforming_weights, fs=16000, n
     enhanced_signal_freq = np.zeros((num_wave_numbers, num_timeslots), dtype=np.complex64)
     for l in range(num_timeslots):
         for k in range(num_wave_numbers):
-            for mic_idx in range(num_mics):
-                enhanced_signal_freq[k][l] += beamforming_weights[k][l][mic_idx].conj().T * stft_mic_signals[mic_idx][k][l]
+            enhanced_signal_freq[k][l] = beamforming_weights[k][l][:].conj() @ stft_mic_signals[:,k,l]
 
     # Calculate the inverse STFT of the enhanced signal in the frequency domain
     enhanced_signal = np.array(istft(enhanced_signal_freq, fs, nperseg=nperseg, noverlap=noverlap, freq_axis=0, time_axis=1))[1]
@@ -39,10 +38,14 @@ def calculate_delay_and_sum_weights(rtf):
     delay_and_sum_beamformer = np.zeros(rtf.shape, dtype=np.complex64)
     for l in range(num_timeslots):
         for k in range(num_wave_numbers):
-            for mic_idx in range(rtf.shape[2]):
-                # Calculate the beamforming weights using the delay-and-sum algorithm
-                delay_and_sum_beamformer[k][l][mic_idx] = rtf[k][l][mic_idx] / (rtf[k][l][mic_idx].conj().T * rtf[k][l][mic_idx])
-                
+            delay_and_sum_beamformer[k][l] = rtf[k][l] / (rtf[k][l] @ rtf[k][l].conj().T)
+            # for mic_idx in range(rtf.shape[2]):
+            #     # Calculate the beamforming weights using the delay-and-sum algorithm
+            #     delay_and_sum_beamformer[k][l][mic_idx] = rtf[k][l][mic_idx] / np.dot(rtf[k][l][mic_idx].conj().T, rtf[k][l][mic_idx])
+            #     # print("l: ", l, " k: ", k, " mic_idx: ", mic_idx)
+            #     # print("np.dot(rtf[k][l][mic_idx].conj().T, rtf[k][l][mic_idx]): ", np.dot(rtf[k][l][mic_idx].conj().T, rtf[k][l][mic_idx]))
+            #     # input("Press Enter to continue...")
+
     return delay_and_sum_beamformer
 
 def calculate_mvdr_weights(rtf, Rn):
@@ -61,8 +64,10 @@ def calculate_mvdr_weights(rtf, Rn):
 
             # Calculate the beamforming weights using the minimum variance distortionless response (MVDR) algorithm
             inverse_covariance_matrix[k][l] = np.linalg.inv(Rn_reg)
-            
-            mvdr_beamformer[k][l] = np.dot(inverse_covariance_matrix[k][l], rtf[k][l]) / (np.dot(np.dot(rtf[k][l].conj().T, inverse_covariance_matrix[k][l]), rtf[k][l]))
+
+            #mvdr_beamformer[k][l] = np.dot(inverse_covariance_matrix[k][l], rtf[k][l]) / (np.dot(rtf[k][l].conj().T, inverse_covariance_matrix[k][l]) @ rtf[k][l]) # we use here becuase python is row major
+            mvdr_beamformer[k][l] = (rtf[k][l] @ inverse_covariance_matrix[k][l].T) / ((rtf[k][l] @ inverse_covariance_matrix[k][l].T).conj() @ rtf[k][l])
+            #mvdr_beamformer[k][l] = np.outer(inverse_covariance_matrix[k][l], rtf[k][l]) / ((rtf[k][l] @ inverse_covariance_matrix[k][l].T).conj() @ rtf[k][l])
    
     return mvdr_beamformer
 
@@ -77,13 +82,13 @@ def calculate_Multi_channel_Wiener_weigths(rtf, Rn, sig_var, MVDR_weigths):
     for l in range(num_timeslots):
         for k in range(num_wave_numbers):
             # Add a small amount of noise to the diagonal of the covariance matrix
-            Rn_reg = Rn[k][l] + np.eye(Rn[k][l].shape[0]) * 1e-10
+            Rn_reg = Rn[k][l] + np.eye(Rn[k][l].shape[0]) * 1e-20
 
             # Calculate the beamforming weights using the multi-channel Wiener algorithm
             inverse_covariance_matrix[k][l] = np.linalg.inv(Rn_reg)
 
             # Single channel Wiener filter
-            SC_Winer_w = sig_var[k][l] / (sig_var[k][l] + np.dot(np.dot(rtf[k][l].conj().T, inverse_covariance_matrix[k][l]), rtf[k][l]))
+            SC_Winer_w = sig_var[k][l] / (sig_var[k][l] + 1/((rtf[k][l] @ inverse_covariance_matrix[k][l].T).conj() @ rtf[k][l]))
 
             # Multi channel Wiener filter
             mcw_beamformer[k][l] = SC_Winer_w * MVDR_weigths[k][l]

@@ -1,5 +1,6 @@
 import numpy as np
 import pystoi
+from scipy.signal import correlate
 from scipy.signal import hilbert
 from gammatone.gtgram import gtgram
 from scipy.signal import stft
@@ -19,53 +20,6 @@ STFT_OVERLAP = STFT_TIME/2
 GAMMA_NUM_BANDS = 28
 GAMMA_LOW_FREQ = 100
 GAMMA_HIGH_FREQ = 8000 # half of sample frequency is standard, but in research this was 6500?
-
-def visualize_beamforming_weights(beamforming_weights):
-    # Sum the beamforming weights across the microphone dimension
-    print("beamforming_weights shape: ", beamforming_weights.shape)
-    beamforming_weights_sum = np.sum(beamforming_weights, axis=2)
-    print("beamforming_weights shape: ", beamforming_weights.shape)
-    # Calculate the magnitude of the beamforming weights
-    beamforming_weights_magnitude = np.abs(beamforming_weights_sum)
-
-    # Normalize the beamforming weights to the range [0, 1]
-    beamforming_weights_magnitude = (beamforming_weights_magnitude - np.min(beamforming_weights_magnitude)) / (np.max(beamforming_weights_magnitude) - np.min(beamforming_weights_magnitude))
-
-    # Create a heatmap of the beamforming weights
-    plt.figure(figsize=(10, 10))
-    plt.imshow(beamforming_weights_magnitude, aspect='auto', cmap='jet', vmin=np.min(beamforming_weights_magnitude), vmax=np.max(beamforming_weights_magnitude))
-    plt.colorbar(format='%+2.0f dB')
-    plt.title('Beamforming Weights (Magnitude)')
-    plt.xlabel('Time Slots')
-    plt.ylabel('Wave Numbers')
-    plt.show()
-
-def visualize_beamforming_weights_polar(beamforming_weights):
-    # Sum the beamforming weights across the microphone dimension
-    beamforming_weights_sum = np.sum(beamforming_weights, axis=2)
-
-    # Calculate the magnitude and phase of the summed beamforming weights
-    beamforming_weights_magnitude = np.abs(beamforming_weights_sum)
-    beamforming_weights_phase = np.angle(beamforming_weights_sum)
-
-    # Create a figure for the animation
-    fig = plt.figure(figsize=(10, 10))
-    ax = plt.subplot(111, polar=True)
-
-    # Initialize the plot
-    line, = ax.plot([], [], 'o-')
-
-    # Animation update function
-    def update(i):
-        line.set_ydata(beamforming_weights_magnitude[i])
-        line.set_xdata(beamforming_weights_phase[i])
-        return line,
-
-    # Create the animation
-    ani = animation.FuncAnimation(fig, update, frames=range(len(beamforming_weights_magnitude)), blit=True)
-
-    plt.title('Beamforming Weights (Polar Plot)')
-    plt.show()
 
 def calculate_output_SNR(rtf, Rx, Rn):
     # Get the number of wave numbers and timeslots
@@ -93,6 +47,26 @@ def calculate_output_SNR(rtf, Rx, Rn):
 def calculate_stoi(clean_signal, processed_signal, fs):
     stoi_score = pystoi.stoi(clean_signal, processed_signal, fs, extended=False)
     return stoi_score
+
+def calculate_estoi(clean_signal, processed_signal, fs):
+    stoi_score = pystoi.stoi(clean_signal, processed_signal, fs, extended=True)
+    return stoi_score
+
+def calculate_ncm(clean_signal, processed_signal):
+    # Ensure signals are the same length
+    if len(clean_signal) != len(processed_signal):
+        raise ValueError("Signals must be of the same length")
+
+    # Normalize signals
+    clean_signal = clean_signal - np.mean(clean_signal)
+    processed_signal = processed_signal - np.mean(processed_signal)
+    
+    # Calculate the covariance
+    covariance = np.cov(clean_signal, processed_signal)[0, 1]
+    
+    # Calculate the normalized covariance metric
+    ncm_value = covariance / (np.std(clean_signal) * np.std(processed_signal))
+    return ncm_value
 
 def auditory_filtering(signal, fs, num_bands=GAMMA_NUM_BANDS, low_freq=GAMMA_LOW_FREQ, high_freq=GAMMA_HIGH_FREQ):
     # Gammatone spectrogram
