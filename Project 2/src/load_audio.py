@@ -71,7 +71,7 @@ def convolve_audio_sources(data_folder ="data/"):
     # Initialize the combined signals, path signals and clean signals
     combined_signals = np.array([None] * num_mics)
     path_signals = np.array([[None] * num_mics] * num_sources)
-    clean_signal = np.array([None] * num_mics)
+    source_signal = np.array([None] * num_mics)
 
     # Convolve audio sources with impulse responses
     print("Convolving audio sources with impulse responses...")
@@ -114,9 +114,9 @@ def convolve_audio_sources(data_folder ="data/"):
           
     # return clean speech to be used as reference signal
     for mic_idx in range(num_mics):
-        clean_signal = path_signals[4][mic_idx] * 1e3 # / max_amplitude
+        source_signal = path_signals[4][mic_idx] * 1e3 # / max_amplitude
 
-    return impulse_responses, num_sources, num_mics, sample_rate, combined_signals, clean_signal, path_signals
+    return impulse_responses, num_sources, num_mics, sample_rate, combined_signals, source_signal, path_signals
 
 if __name__ == "__main__":
     try:
