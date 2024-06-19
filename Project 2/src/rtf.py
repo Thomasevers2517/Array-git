@@ -2,6 +2,7 @@ import numpy as np
 from scipy.signal import stft, istft
 from scipy.linalg import sqrtm
 import time
+import matplotlib.pyplot as plt
 
 # STFT specs
 N_PER_SEG = 400
@@ -11,7 +12,7 @@ STFT_WINDOW = 'hann'
 STFT_TIME = N_PER_SEG/SAMPLE_FREQ
 STFT_OVERLAP = STFT_TIME/2
 
-def determine_rtf_a_priori_CPSD(mic_signals, path_signals, ref_mic_idx=0, fs=16000, nperseg=N_PER_SEG, noverlap=N_OVERLAP, alpha=0.2, speak_detection_threshold=1e-6):
+def determine_rtf_a_priori_CPSD(mic_signals, path_signals, ref_mic_idx=0, fs=16000, nperseg=N_PER_SEG, noverlap=N_OVERLAP, alpha=0.1, speak_detection_threshold=1e-6):
     print("Determining rtf with a priori information")
     print("alpha: ", alpha)
     
@@ -83,7 +84,7 @@ def determine_rtf_a_priori_CPSD(mic_signals, path_signals, ref_mic_idx=0, fs=160
             ssH = np.outer(stft_mic_source[:, k, l], np.conj(stft_mic_source[:, k, l]))
             if l == 0:
                 Rx[k][l] = xxH
-                Rn[k][l] = 0
+                Rn[k][l] = nnH
                 Rs[k][l] = ssH
             else:
                 # Calculate the cross power spectral density matrix Rx and Rn per source
@@ -98,7 +99,7 @@ def determine_rtf_a_priori_CPSD(mic_signals, path_signals, ref_mic_idx=0, fs=160
             Rs_est[k][l] = Rx[k][l] - Rn[k][l]
 
             # Compute the EVD of the covariance matrix Rx and Rn
-            w_s, V_s = np.linalg.eig(Rs_est[k][l])
+            w_s, V_s = np.linalg.eig(Rs[k][l])
 
             # Sort eigenvalues and eigenvectors in descending order
             sorted_indices = np.argsort(w_s)[::-1]
@@ -106,7 +107,7 @@ def determine_rtf_a_priori_CPSD(mic_signals, path_signals, ref_mic_idx=0, fs=160
             max_eigenvalue_vector = eigenvectors[:, 0]
             
             # Calculate the signal variance from the Rs_est matrix
-            signal_variance[k][l] = np.trace(Rs_est[k][l]) / num_mics
+            signal_variance[k][l] = np.trace(Rs[k][l]) / num_mics
 
             # Now calculate the rtf from the principal eigenvector of Rx for one source
             rtf[k][l] = max_eigenvalue_vector
@@ -124,7 +125,7 @@ def determine_rtf_a_priori_CPSD(mic_signals, path_signals, ref_mic_idx=0, fs=160
 
     return rtf, Rn, signal_variance, stft_mic_signals
 
-def estimate_rtf_prewhiten(mic_signals, path_signals, ref_mic_idx=0, fs=16000, nperseg=N_PER_SEG, noverlap=N_OVERLAP, alpha=0.99, det_threshold=0.05, pre_cheat_time=50, speak_detection_threshold=1e-6):
+def estimate_rtf_Rs_prewhiten(mic_signals, path_signals, source_signal, ref_mic_idx=0, fs=16000, nperseg=N_PER_SEG, noverlap=N_OVERLAP, alpha_pre_cheat = 0.9, alpha=0.95, det_threshold=0.03, pre_cheat_time=60, voice_det_thres=4.4e2, voice_det_thres_per_freq=1e-4):
     
     print("Determining rtf using pre-whiting method...")
     print("Pre-cheat time: ", pre_cheat_time*STFT_TIME, " seconds")
@@ -142,6 +143,8 @@ def estimate_rtf_prewhiten(mic_signals, path_signals, ref_mic_idx=0, fs=16000, n
     # Find the number of wave numbers and time samples
     num_wave_numbers = Zxx_ref.shape[0]
     num_time_samples = Zxx_ref.shape[1]
+    print("Number of wave numbers: ", num_wave_numbers)
+    print("Number of time samples: ", num_time_samples)
 
     # Initialize the rtf array
     rtf = np.zeros((num_wave_numbers, num_time_samples, num_mics), dtype=np.complex64)
@@ -178,42 +181,77 @@ def estimate_rtf_prewhiten(mic_signals, path_signals, ref_mic_idx=0, fs=16000, n
     xxH = np.zeros((num_mics, num_mics), dtype=np.complex64)
     nnH = np.zeros((num_mics, num_mics), dtype=np.complex64)
     
-    # Calculate Cross Power Spectral Density Matrix Rx of the data
-    print("Estimating Rx and Rn... may take a while")
-    
+    # Initialize the source detection variables
     source_present_flag = False
     source_present_begin = 0
     source_present_count = 0
+    source_not_present_count = 0
+
     source_detection_begin = 0
     source_det_count = 0
-    source_det_FA = 0
-    source_det_score = 0
+    source_FA_count = 0
+    source_MD_count = 0
+    source_no_det_count = 0
+    
+    avg_correlation_score = 0
 
+    # Voice detector from the source signal
+    # print("Detecting source signal for diagnostics using a voice detector at threshold: ", voice_det_thres)
+    # for t in range(8000, 58000):
+    #     #print(t, ":", np.abs(source_signal[:][t].sum()))
+    #     # Check if the source is present using a voice detector
+    #     if np.abs(source_signal[:][t].sum())  > voice_det_thres:
+    #         source_present_flag = True
+    #         if(source_present_begin == 0):
+    #             source_present_begin = t
+    #     else:
+    #         source_present_flag = False
+    # #input("Press Enter to continue...")
+
+    # Calculate Cross Power Spectral Density Matrix Rx of the data
+    print("Estimating Rx and Rn... may take a while")
     # Measure time taken to calculate Rs
+    n = 0
+    # Begin the measurement at 1 second to avoid the initial noise
+    start_estimation_time = 40
     start_time = time.time()
     for l in range(num_time_samples):
-        if np.abs(stft_mic_source[:, :, l].sum()) > speak_detection_threshold:
-            source_present_flag = True
-            if(source_present_begin == 0):
-                source_present_begin = l
-        else:
-            source_present_flag = False
+        # if(l*nperseg > 14000 and l*nperseg < 58000):
+        #     # plot the current fourier transform
+        #     plt.figure()
+        #     plt.plot(np.abs(stft_mic_source[0][5:, l]))
+        #     plt.title("STFT of microphone 0 at time sample: " + str(l))
+        #     plt.show()
+
         for k in range(num_wave_numbers):
+            # n += 1
+            # print("nth calc: ", n, "\tt frame: ", l*nperseg, ":", (l+1)*nperseg, "\tk: ", k, "\tl: ", l, "\tstft_mic_source[:, k, l].sum(): ", np.abs(stft_mic_source[:, k, l].sum()))
+
+            # Check if the source is present using a voice detector
+            if np.abs(stft_mic_source[:, k, l].sum())  > voice_det_thres_per_freq:
+                if l>= pre_cheat_time:
+                    source_present_count += 1
+                source_present_flag = True
+                if(source_present_begin == 0):
+                    source_present_begin = l
+            else:
+                if l>= pre_cheat_time:
+                    source_not_present_count += 1
+                source_present_flag = False
+
             # Compute CPSD for each pair of microphones with a small pre-cheat time
             xxH = np.outer(stft_mic_signals[:, k, l], np.conj(stft_mic_signals[:, k, l]))
-            if l == 0:
+            nnH = np.outer(stft_mic_noise[:, k, l], np.conj(stft_mic_noise[:, k, l]))
+            ssH = np.outer(stft_mic_source[:, k, l], np.conj(stft_mic_source[:, k, l]))
+            if l < start_estimation_time:
                 Rx[k][l] = xxH
-                Rn[k][l] = 0
+                Rn[k][l] = Rn[k][l-1]*0.2 + nnH*(1 - 0.2)
+                Rs[k][l] = ssH
             else:
                 if l < pre_cheat_time:
-                    nnH = np.outer(stft_mic_noise[:, k, l], np.conj(stft_mic_noise[:, k, l]))
-                    ssH = np.outer(stft_mic_source[:, k, l], np.conj(stft_mic_source[:, k, l]))
-                    # Pre-cheat the noise covariance matrix, to know what our target must be
-                    # Check if the source is present
-                    #if np.abs(stft_mic_source[:, k, l].sum()) > speak_detection_threshold:
-                    Rn[k][l] = Rn[k][l-1]*alpha + nnH*(1 - alpha)
+                    Rn[k][l] = Rn[k][l-1]*alpha_pre_cheat + nnH*(1 - alpha_pre_cheat)
                     Rs[k][l] = ssH
-                    Rx[k][l] = Rx[k][l-1]*alpha + xxH*(1 - alpha)
+                    Rx[k][l] = Rx[k][l-1]*alpha_pre_cheat + xxH*(1 - alpha_pre_cheat)
 
             # Decide on the detection threshold to update the noise space
             if l >= pre_cheat_time:
@@ -224,31 +262,6 @@ def estimate_rtf_prewhiten(mic_signals, path_signals, ref_mic_idx=0, fs=16000, n
                 sorted_indices = np.argsort(w_x)[::-1]
                 eigenvectors = V_x[:, sorted_indices]
                 max_eigenvectors = eigenvectors[:, 0]
-
-                # # and Rx[l-1] to find the eigenvector that correlates most with our current measurement
-                # w_x, V_x = np.linalg.eig(Rx[k][l])
-
-                # # Sort eigenvalues and eigenvectors in descending order
-                # sorted_indices = np.argsort(w_x)[::-1]
-                # eigenvectors_prev = V_x[:, sorted_indices]
-
-                # # Find the eigenvector that correlates most with our current measurement
-                # correlation_coef = np.zeros(eigenvectors.shape[1])
-
-                # for i in range(eigenvectors_prev.shape[1]):
-                #     correlation_coef[i] = np.abs(np.corrcoef(max_eigenvectors, eigenvectors_prev[:, i])[0, 1]) # TODO, is this the correct way to correlate complex numbers?
-                # best_fitting_eigenvectors_prev = eigenvectors_prev[:, np.argmax(correlation_coef)]
-
-                # # Normalize and dot the eigenvecotrs
-                # vector_dot_product = np.vdot(max_eigenvectors, best_fitting_eigenvectors_prev) / (np.linalg.norm(max_eigenvectors) * np.linalg.norm(best_fitting_eigenvectors_prev))
-                # corr_score = correlation_coef[np.argmax(correlation_coef)]
-
-                # if corr_score < det_threshold and np.abs(vector_dot_product) < det_threshold: # find a way to see how accurate this is with the actual precense of the source
-                #     #Rx[k][l] = Rx[k][l-1]*alpha + xxH*(1 - alpha)
-                #     Rn[k][l] = Rn[k][l-1]
-                # else:
-                #     #Rx[k][l] = Rx[k][l-1]
-                #     Rn[k][l] = Rn[k][l-1]*alpha + xxH*(1-alpha)
                 
                 Rs[k][l] = Rx[k][l-1] - Rn[k][l-1]
                 w_s, V_s = np.linalg.eig(Rs[k][l])
@@ -261,18 +274,26 @@ def estimate_rtf_prewhiten(mic_signals, path_signals, ref_mic_idx=0, fs=16000, n
                 # Decide on the detection threshold to update the noise space
                 corr_score = np.dot(np.abs(max_eigenvectors), np.abs(max_eigenvectors_prev)) / (np.linalg.norm(max_eigenvectors) * np.linalg.norm(max_eigenvectors_prev))
                 
+                # Update the average correlation score
+                avg_correlation_score += corr_score
+
                 # Gather statistics on the source detection
                 if corr_score > det_threshold:
-                    source_det_count += 1
-                                
+                    # Check when the detection algorithm starts detecting the source
                     if source_detection_begin == 0:
                         source_detection_begin = l
+
+                    # Check for false alarms and succefull detects
                     if source_present_flag:
-                        source_present_count += 1
-                        source_det_score += 1
+                        source_det_count += 1
                     else:
-                        source_det_FA += 1
-                
+                        source_FA_count += 1
+                else:
+                    if source_present_flag:
+                        source_MD_count += 1
+                    else:
+                        source_no_det_count += 1
+
                 if corr_score > det_threshold:
                     Rx[k][l] = Rx[k][l-1]*alpha + xxH*(1 - alpha)
                     Rn[k][l] = Rn[k][l-1]
@@ -322,10 +343,8 @@ def estimate_rtf_prewhiten(mic_signals, path_signals, ref_mic_idx=0, fs=16000, n
             # Calculate the signal variance from the Rs_est matrix
             signal_variance[k][l] = np.trace(Rs_hat) / num_mics
 
-            # Now calculate the rtf from the principal eigenvector of Rx for one source
+            # Now calculate the rtf from the principal eigenvector of Rs_hat for one source
             rtf[k][l] = max_eigenvectors
-            if(rtf[k][l][0] == 0):
-                rtf[k][l][0] = rtf[k][l][0] + 1e-10
             rtf[k][l] = rtf[k][l] / rtf[k][l][0]
 
         # Print the progress every 10% of the total number of time samples
@@ -336,18 +355,30 @@ def estimate_rtf_prewhiten(mic_signals, path_signals, ref_mic_idx=0, fs=16000, n
     end_time = time.time()
     print(f"Time taken to calculate Rs: {end_time - start_time:.2f} seconds, for {num_wave_numbers * num_time_samples * 16} covariance and eigenvalue calculations")
 
+    print("avg_correlation_score: ", avg_correlation_score/((num_time_samples - pre_cheat_time)*num_wave_numbers))
+
+    # Print the source detection statistics
+    print("source_present_begin: ", source_present_begin)
+    print("source_present_count: ", source_present_count)
+    print("source_not_present_count: ", source_not_present_count)
+
+    print("source_detection_begin: ", source_detection_begin)
+    print("source_det_count: ", source_det_count)
+    print("source_FA_count: ", source_FA_count)
+    print("source_MD_count: ", source_MD_count)
+    print("source_no_det_count: ", source_no_det_count)
+
+    print("Detection score: ", source_det_count/source_present_count)
+    print("Missed detection score: ", source_MD_count/source_present_count)
+    print("False alarm score: ", source_FA_count/source_not_present_count)
+    print("No detection score: ", source_no_det_count/source_not_present_count)
     
-    print("source_present_begin l : ", source_present_begin)
-    print("source_detection_begin l : ", source_detection_begin)
-    print("source_present_count (incl every wave number per time sample): ", source_present_count)
-    print("source detection count (incl every wave number per time sample): ", source_det_count)
-    print("source_det_score: ", source_det_score)
-    print("Detection_score: ", source_det_score/source_present_count)
-    print("source_det_FA: ", source_det_FA)
+    print("source_detection_rate: ", source_det_count / (source_det_count + source_FA_count + 1))
+    print("Source no detect rate: ", source_no_det_count / (source_no_det_count + source_MD_count + 1))
 
     return rtf, Rn, signal_variance, stft_mic_signals
 
-def estimate_rtf_GEVD(mic_signals, path_signals, ref_mic_idx=0, fs=16000, nperseg=N_PER_SEG, noverlap=N_OVERLAP, alpha=0.8, det_threshold=0.9, pre_cheat_time=50, speak_detection_threshold=1e-6):
+def estimate_rtf_GEVD(mic_signals, path_signals, source_signal, ref_mic_idx=0, fs=16000, nperseg=N_PER_SEG, noverlap=N_OVERLAP, alpha=0.8, det_threshold=0.9, pre_cheat_time=50, speak_detection_threshold=1e-6):
     print("Determining rtf using GEVD")
     print("Pre-cheat time: ", pre_cheat_time*STFT_TIME, " seconds")
     print("detection threshold: ", det_threshold)
@@ -505,7 +536,7 @@ def estimate_rtf_GEVD(mic_signals, path_signals, ref_mic_idx=0, fs=16000, nperse
     return rtf, Rn, signal_variance, stft_mic_signals
     
 # Not used ####################################################################
-def estimate_rtf_prewhiten_working(mic_signals, path_signals, ref_mic_idx=0, fs=16000, nperseg=N_PER_SEG, noverlap=N_OVERLAP, alpha=0.99, det_threshold=0.05, pre_cheat_time=50, speak_detection_threshold=1e-6):
+def estimate_rtf_Rs_prewhiten_working(mic_signals, path_signals, source_signal, ref_mic_idx=0, fs=16000, nperseg=N_PER_SEG, noverlap=N_OVERLAP, alpha=0.99, det_threshold=0.04, pre_cheat_time=50, speak_detection_threshold=1e-6):
     
     print("Determining rtf using pre-whiting method...")
     print("Pre-cheat time: ", pre_cheat_time*STFT_TIME, " seconds")

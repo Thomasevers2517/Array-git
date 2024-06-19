@@ -39,6 +39,10 @@ import src.beam_former as beam_former
 import src.rtf as rtf
 import src.intel_metric as intel_metric
 
+# Settings for signal processing
+LOW_CUT = 200  # Low cut-off frequency for bandpass filter
+HIGH_CUT = 7000  # High cut-off frequency for bandpass filter
+
 # Create a queue to hold the data
 data_queue = queue.Queue()
 
@@ -153,9 +157,47 @@ def bandpass_filter(signal, lowcut, highcut, fs, order=5):
     b, a = butter(order, [low, high], btype='band')
 
     # Apply the filter
+    filtered_signal = np.zeros_like(signal)
     filtered_signal = lfilter(b, a, signal)
 
     return filtered_signal
+
+def audio_compressor(signal, threshold, gain, ratio):
+    threshold = 10
+    gain = 0.5
+    ratio = 2
+    compressed_signal = np.zeros_like(signal)
+
+    # Apply the volume compression
+    if signal.shape[0] > 5: # 1D signal
+        for i in range(len(signal)):
+            if np.abs(signal[i]) > threshold:
+                compressed_signal[i] = np.sign(signal[i]) * threshold + (np.abs(signal[i]) - threshold) * gain  # Hard clipping
+            else:
+                compressed_signal[i] = signal[i]
+    
+    if signal.shape[0] == 4: # 2D signal
+        mic_num = signal.shape[0]
+        for mic in range(mic_num):
+            for i in range(len(signal[0])):
+                if np.abs(signal[mic][i]) > threshold:
+                    compressed_signal[mic][i] = threshold #np.sign(signal[mic][i]) * threshold + (np.abs(signal[mic][i]) - threshold) * gain
+                else:
+                    print("signal[mic][i]: ", signal[mic][i])
+                    compressed_signal[mic][i] = signal[mic][i]
+    
+    if signal.shape[0] == 5: # 3D signal
+        mic_num = signal.shape[1]
+        source_num = signal.shape[0]
+        for mic in range(mic_num):
+            for source in range(source_num):
+                for i in range(len(signal[0])):
+                    if np.abs(signal[mic][source][i]) > threshold:
+                        compressed_signal[mic][source][i] = threshold #np.sign(signal[mic][source][i]) * threshold + (np.abs(signal[mic][source][i]) - threshold) * gain
+                    else:
+                        compressed_signal[mic][source][i] = signal[mic][source][i]
+
+    return compressed_signal
 
 def eval_metrics(source_signal, enhanced_signal, sample_rate):
     stoi_score = np.round(intel_metric.calculate_stoi(source_signal[:len(enhanced_signal)], enhanced_signal, sample_rate), 2)
@@ -168,9 +210,12 @@ def main():
     # Initialize Pygame
     pygame.init()
 
+    mic_signals = np.array(np.zeros((4, 80800)))
+    source_signal = np.array(np.zeros((4, 80800)))
+    path_signals = np.array(np.zeros((5, 4, 80800)))
+
     # ======================================== Load Audio Data ========================================
     impulse_responses, num_sources, num_mics, sample_rate, mic_signals, source_signal, path_signals = load_audio.convolve_audio_sources(data_folder="src/data/")
-    
     # ======================================== Audio preprocessing ========================================
 
     # Add all the signals from the microphones with equal weigths to create the combined signal
@@ -181,32 +226,59 @@ def main():
 
     # Measure the threshold for source precense using the source signal
     # plot the audio sample in time domain
-    plt.figure()
-    plt.plot(source_signal)
-    plt.title('Source Signal')
-    plt.xlabel('Time')
-    plt.ylabel('Amplitude')
-    plt.grid()
-    plt.show()
+    # plt.figure()
+    # plt.plot(source_signal)
+    # plt.title('Source Signal')
+    # plt.xlabel('Time')
+    # plt.ylabel('Amplitude')
+    # plt.grid()
+    # plt.show()
 
     # Metric
     stoi_score, estoi_score, siib_score, ncm_score = eval_metrics(source_signal, combined_signal, sample_rate)
     print("combined_signal scores: STOI: ", stoi_score, " ESTOI: ", estoi_score, " SIIB: ", siib_score, " NCM: ", ncm_score)
 
-    # Filter the combined signal
-    filtered_signal = bandpass_filter(combined_signal, lowcut=1000, highcut=6000, fs=sample_rate)
-    
+    # # # Play the combined signal
+    # play_audio_show_spectrum(combined_signal, sample_rate)
+    # input("Press Enter to continue...")
+
+    # Filter the all signals with a bandpass filter
+    # print("Filtering the audio signals with a bandpass filter at ", LOW_CUT, "Hz and ", HIGH_CUT, "Hz...")
+    # combined_signal = bandpass_filter(combined_signal, lowcut=LOW_CUT, highcut=HIGH_CUT, fs=sample_rate)
+    # mic_signals[0] = bandpass_filter(mic_signals[0], lowcut=LOW_CUT, highcut=HIGH_CUT, fs=sample_rate)
+    # mic_signals[1] = bandpass_filter(mic_signals[1], lowcut=LOW_CUT, highcut=HIGH_CUT, fs=sample_rate)
+    # mic_signals[2] = bandpass_filter(mic_signals[2], lowcut=LOW_CUT, highcut=HIGH_CUT, fs=sample_rate)
+    # mic_signals[3] = bandpass_filter(mic_signals[3], lowcut=LOW_CUT, highcut=HIGH_CUT, fs=sample_rate)
+    # # source_signal = bandpass_filter(source_signal, lowcut=LOW_CUT, highcut=HIGH_CUT, fs=sample_rate)
+    # # path_signals = bandpass_filter(path_signals, lowcut=LOW_CUT, highcut=HIGH_CUT, fs=sample_rate)
+
+    # # Volume Compress the audio signal with a threshold at 20000, gain of 0.5 and a ratio of 2
+    # print("Volume compressing the audio signals with a threshold at 20000, gain of 0.5 and a ratio of 2...")
+    # combined_signal = audio_compressor(combined_signal, threshold=20000, gain=0.5, ratio=2)
+    # mic_signals[0] = audio_compressor(mic_signals[0], threshold=20000, gain=0.5, ratio=2)
+    # mic_signals[1] = audio_compressor(mic_signals[1], threshold=20000, gain=0.5, ratio=2)
+    # mic_signals[2] = audio_compressor(mic_signals[2], threshold=20000, gain=0.5, ratio=2)
+    # mic_signals[3] = audio_compressor(mic_signals[3], threshold=20000, gain=0.5, ratio=2)
+    # #source_signal = audio_compressor(source_signal, threshold=20000, gain=0.5, ratio=2)
+    # #path_signals = audio_compressor(path_signals, threshold=20000, gain=0.5, ratio=2)
+
+    # # Play the combined signal
+    # play_audio_show_spectrum(combined_signal, sample_rate)
+    # input("Press Enter to continue...")
+
     # Metric
-    stoi_score, estoi_score, siib_score, ncm_score = eval_metrics(source_signal, filtered_signal, sample_rate)
-    print("filtered_signal scores: STOI: ", stoi_score, " ESTOI: ", estoi_score, " SIIB: ", siib_score, " NCM: ", ncm_score)
+    # stoi_score, estoi_score, siib_score, ncm_score = eval_metrics(source_signal, combined_signal, sample_rate)
+    # print("filtered_signal scores: STOI: ", stoi_score, " ESTOI: ", estoi_score, " SIIB: ", siib_score, " NCM: ", ncm_score)
 
     # ======================================== Relative Transfer Function (RTF) ========================================
     # Determine the relative transfer function (RTF) for each microphone
-    # rtf_cheating, Rn, sig_var, stft_mic_signals = rtf.determine_rtf_a_priori_CPSD(mic_signals, path_signals)  
+    rtf_cheating, Rn, sig_var, stft_mic_signals = rtf.determine_rtf_a_priori_CPSD(mic_signals, path_signals)  
     
     #  Estimate the relative transfer function (RTF) for each microphone using prewhitening
-    rtf_estimated_prewhiten, Rn, sig_var, stft_mic_signals = rtf.estimate_rtf_prewhiten(mic_signals, path_signals)
+    rtf_estimated_prewhiten, Rn, sig_var, stft_mic_signals = rtf.estimate_rtf_Rs_prewhiten(mic_signals, path_signals, source_signal)
 
+    #  Estimate the relative transfer function (RTF) for each microphone using prewhitening
+    #rtf_estimated_prewhiten, Rn, sig_var, stft_mic_signals = rtf.estimate_rtf_Rs_prewhiten_working(mic_signals, path_signals, source_signal)
     #  Estimate the relative transfer function (RTF) for each microphone using GEVD
     #rtf_estimated_GEVD, Rn, sig_var, stft_mic_signals = rtf.estimate_rtf_GEVD(mic_signals, path_signals)
 
@@ -227,17 +299,17 @@ def main():
     # plt.show()
 
     # ======================================== Delay-and-Sum Beamformer ========================================
-    # # Calculate a delay-and-sum beamformer
-    # print("Calculating delay-and-sum beamformer...")
-    # delay_and_sum_weights = beam_former.calculate_delay_and_sum_weights(rtf_estimated_prewhiten)
+    # Calculate a delay-and-sum beamformer
+    print("Calculating delay-and-sum beamformer with cheating...")
+    delay_and_sum_weights = beam_former.calculate_delay_and_sum_weights(rtf_cheating)
 
-    # # Apply the delay-and-sum beamformer to enhance the audio signal
-    # print("Applying delay-and-sum beamformer...")
-    # enhanced_signal_delay_and_sum = beam_former.apply_beamforming_weights(stft_mic_signals, delay_and_sum_weights)
+    # Apply the delay-and-sum beamformer to enhance the audio signal
+    print("Applying delay-and-sum beamformer...")
+    enhanced_signal_delay_and_sum = beam_former.apply_beamforming_weights(stft_mic_signals, delay_and_sum_weights)
 
-    # # Metric
-    # stoi_score, estoi_score, siib_score, ncm_score = eval_metrics(source_signal, enhanced_signal_delay_and_sum, sample_rate)
-    # print("Delay-and-Sum scores: STOI: ", stoi_score, " ESTOI: ", estoi_score, " SIIB: ", siib_score, " NCM: ", ncm_score)
+    # Metric
+    stoi_score, estoi_score, siib_score, ncm_score = eval_metrics(source_signal, enhanced_signal_delay_and_sum, sample_rate)
+    print("Delay-and-Sum scores: STOI: ", stoi_score, " ESTOI: ", estoi_score, " SIIB: ", siib_score, " NCM: ", ncm_score)
 
     # # Play the enhanced signal
     # play_audio_show_spectrum(enhanced_signal_delay_and_sum, sample_rate)
@@ -245,7 +317,60 @@ def main():
     
     # ======================================== Minimum Variance Distortionless Response (MVDR) ========================================
     # Calculate weigths for the MVDR beamformer
-    print("Calculating MVDR beamformer...")
+    print("Calculating MVDR beamformer with cheating...")
+    w_mvdr = beam_former.calculate_mvdr_weights(rtf_cheating, Rn)
+
+    # Apply the MVDR beamformer to enhance the audio signal
+    print("Applying MVDR beamformer...")
+    enhanced_signal_mvdr = beam_former.apply_beamforming_weights(stft_mic_signals, w_mvdr)
+
+    # Metric
+    stoi_score, estoi_score, siib_score, ncm_score = eval_metrics(source_signal, enhanced_signal_mvdr, sample_rate)
+    print("MVDR scores: STOI: ", stoi_score, " ESTOI: ", estoi_score, " SIIB: ", siib_score, " NCM: ", ncm_score)
+
+    # # Play the enhanced signal
+    # play_audio_show_spectrum(enhanced_signal_mvdr, sample_rate)
+    # input("Press Enter to continue...")
+
+    # ======================================== Multi-Channel Wiener Filter ========================================
+    # Calculate weigths for the Multi-Channel Wiener
+
+    print("Calculating Multi-Channel Wiener beamformer with cheating...")
+    w_MCWiener = beam_former.calculate_Multi_channel_Wiener_weigths(rtf_cheating, Rn, sig_var, w_mvdr)
+
+    # Apply the Multi-Channel Wiener beamformer to enhance the audio signal
+    print("Applying Multi-Channel Wiener beamformer...")
+    enhanced_signal_MCWiener = beam_former.apply_beamforming_weights(stft_mic_signals, w_MCWiener)
+    print("Enhanced signal (Multi-Channel Wiener Beamformer):", enhanced_signal_MCWiener)
+
+    # Metric
+    stoi_score, estoi_score, siib_score, ncm_score = eval_metrics(source_signal, enhanced_signal_MCWiener, sample_rate)
+    print("Multi-Channel Wiener scores: STOI: ", stoi_score, " ESTOI: ", estoi_score, " SIIB: ", siib_score, " NCM: ", ncm_score)
+
+    # # Play the enhanced signal
+    # play_audio_show_spectrum(enhanced_signal_MCWiener, sample_rate)
+
+
+    # ======================================== Delay-and-Sum Beamformer ========================================
+    # Calculate a delay-and-sum beamformer
+    print("Calculating delay-and-sum beamformer with detector...")
+    delay_and_sum_weights = beam_former.calculate_delay_and_sum_weights(rtf_estimated_prewhiten)
+
+    # Apply the delay-and-sum beamformer to enhance the audio signal
+    print("Applying delay-and-sum beamformer...")
+    enhanced_signal_delay_and_sum = beam_former.apply_beamforming_weights(stft_mic_signals, delay_and_sum_weights)
+
+    # Metric
+    stoi_score, estoi_score, siib_score, ncm_score = eval_metrics(source_signal, enhanced_signal_delay_and_sum, sample_rate)
+    print("Delay-and-Sum scores: STOI: ", stoi_score, " ESTOI: ", estoi_score, " SIIB: ", siib_score, " NCM: ", ncm_score)
+
+    # # Play the enhanced signal
+    # play_audio_show_spectrum(enhanced_signal_delay_and_sum, sample_rate)
+    # input("Press Enter to continue...")
+    
+    # ======================================== Minimum Variance Distortionless Response (MVDR) ========================================
+    # Calculate weigths for the MVDR beamformer
+    print("Calculating MVDR beamformer with detector...")
     w_mvdr = beam_former.calculate_mvdr_weights(rtf_estimated_prewhiten, Rn)
 
     # Apply the MVDR beamformer to enhance the audio signal
@@ -262,7 +387,7 @@ def main():
 
     # ======================================== Multi-Channel Wiener Filter ========================================
     # Calculate weigths for the Multi-Channel Wiener
-    print("Calculating Multi-Channel Wiener beamformer...")
+    print("Calculating Multi-Channel Wiener beamformer with detector...")
     w_MCWiener = beam_former.calculate_Multi_channel_Wiener_weigths(rtf_estimated_prewhiten, Rn, sig_var, w_mvdr)
 
     # Apply the Multi-Channel Wiener beamformer to enhance the audio signal
