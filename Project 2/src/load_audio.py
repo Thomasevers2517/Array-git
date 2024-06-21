@@ -71,7 +71,9 @@ def convolve_audio_sources(data_folder ="data/"):
     # Initialize the combined signals, path signals and clean signals
     combined_signals = np.array([None] * num_mics)
     path_signals = np.array([[None] * num_mics] * num_sources)
+    mic_signals = np.array([None] * num_mics)
     source_signal = np.array([None] * num_mics)
+    noise_signal = np.array([None] * num_mics)
 
     # Convolve audio sources with impulse responses
     print("Convolving audio sources with impulse responses...")
@@ -81,11 +83,11 @@ def convolve_audio_sources(data_folder ="data/"):
         wav_file_path = wav_file_paths[source_idx]
         signal_data, sample_rate = load_wav_file(wav_file_path)
 
-        mic_signals = [None] * num_mics
+        combined_signals = [None] * num_mics
         for mic_idx in range(num_mics):
             impulse_response = impulse_responses[source_idx, mic_idx]
             convolved_signal = convolve_signal(signal_data, impulse_response)
-            mic_signals[mic_idx] = convolved_signal
+            combined_signals[mic_idx] = convolved_signal
             path_signals[source_idx][mic_idx] = convolved_signal[:min_length]
     
             if combined_signals[mic_idx] is None:
@@ -101,25 +103,30 @@ def convolve_audio_sources(data_folder ="data/"):
                 # Find the maximum sound amplitude over alle signals and mics
                 max_amplitude_in_signal = np.max(combined_signals[mic_idx])
                 max_amplitude = max(max_amplitude, max_amplitude_in_signal)
-
-    # Normalize the combined signals to the maximum amplitude
-    # print("Normalizing combined signals and path signals...")
-    # print("Normalization gain: ", 1/max_amplitude)
     
-    # Gain the signals to with 1e6 
-    for mic_idx in range(num_mics):
-        for source_idx in range(num_sources):
-            path_signals[source_idx][mic_idx] = path_signals[source_idx][mic_idx] * 1e3 # / max_amplitude
-        combined_signals[mic_idx] = combined_signals[mic_idx] * 1e3 # / max_amplitude
-          
-    # return clean speech to be used as reference signal
-    for mic_idx in range(num_mics):
-        source_signal = path_signals[4][mic_idx] * 1e3 # / max_amplitude
+    # Calculate the RMS of the signals
+    rms = np.sqrt(np.mean(np.square(combined_signals)))
+    print("RMS of the audio at the reference microphone: ", rms)
 
-    return impulse_responses, num_sources, num_mics, sample_rate, combined_signals, source_signal, path_signals
+    # Gain the signals to with 1e3 to prevent floating point errors
+    print(f"Apply {np.round((1/rms),2)} gain to the signals to normalize...")
+    for mic_idx in range(num_mics):
+        mic_signals[mic_idx] =  np.sum(path_signals[:5, mic_idx]) * (1/rms)
+        source_signal[mic_idx] = path_signals[4][mic_idx] * (1/rms)
+        noise_signal[mic_idx] = np.sum(path_signals[:4, mic_idx]) * (1/rms)
+    
+    # Calculate the RMS of the signals after gain
+    rms = np.sqrt(np.mean(np.square(mic_signals[0])))
+    print("RMS of the reference microphone after gain: ", rms)
+    rms = np.sqrt(np.mean(np.square(source_signal[0])))
+    print("RMS of the source signal after gain: ", rms)
+    rms = np.sqrt(np.mean(np.square(noise_signal[0])))
+    print("RMS of the noise signal after gain: ", rms)
+
+    return impulse_responses, num_sources, num_mics, sample_rate, mic_signals, noise_signal, source_signal
 
 if __name__ == "__main__":
     try:
-        _,combined_signals,_,_ = convolve_audio_sources()
+        _,mic_signals,_,_ = convolve_audio_sources()
     except KeyboardInterrupt:
         print("KeyboardInterrupt: Stopping all threads and exiting...")
