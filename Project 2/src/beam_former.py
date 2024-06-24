@@ -39,12 +39,6 @@ def calculate_delay_and_sum_weights(rtf):
     for l in range(num_timeslots):
         for k in range(num_wave_numbers):
             delay_and_sum_beamformer[k][l] = rtf[k][l] / (rtf[k][l] @ rtf[k][l].conj().T)
-            # for mic_idx in range(rtf.shape[2]):
-            #     # Calculate the beamforming weights using the delay-and-sum algorithm
-            #     delay_and_sum_beamformer[k][l][mic_idx] = rtf[k][l][mic_idx] / np.dot(rtf[k][l][mic_idx].conj().T, rtf[k][l][mic_idx])
-            #     # print("l: ", l, " k: ", k, " mic_idx: ", mic_idx)
-            #     # print("np.dot(rtf[k][l][mic_idx].conj().T, rtf[k][l][mic_idx]): ", np.dot(rtf[k][l][mic_idx].conj().T, rtf[k][l][mic_idx]))
-            #     # input("Press Enter to continue...")
 
     return delay_and_sum_beamformer
 
