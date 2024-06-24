@@ -54,7 +54,7 @@ def bf_freq(X, d, m, N):
     for i in range(d):
         A_est_freq[:, i] = A_est_freq[:, i] / A_est_freq[0, i]
 
-    W_freq = A_est_freq @ np.linalg.pinv(A_est_freq.conj().T @ A_est_freq)
+    W_freq = A_est_freq @ np.linalg.inv(A_est_freq.conj().T @ A_est_freq)
     return W_freq
 
 W_angle = bf_angle(X_normal, d, delta)

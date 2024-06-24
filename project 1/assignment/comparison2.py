@@ -54,7 +54,7 @@ def bf_freq(X, d, m, N):
     for i in range(d):
         A_est_freq[:, i] = A_est_freq[:, i] / A_est_freq[0, i]
 
-    W_freq = A_est_freq @ np.linalg.pinv(A_est_freq.conj().T @ A_est_freq)
+    W_freq = A_est_freq @ np.linalg.inv(A_est_freq.conj().T @ A_est_freq)
     return W_freq
 W_angle = bf_angle(X_normal, d, delta)
 S_est_angle =  W_angle.conj().T @ X_normal
@@ -68,7 +68,7 @@ plt.plot(S_est_angle[0, :], label='Estimated Source 1')
 plt.plot(S_est_angle[1, :], label='Estimated Source 2')
 plt.plot(S_est_freq2[0, :], label='Estimated Source 1 Freq')
 plt.plot(S_est_freq2[1, :], label='Estimated Source 2 Freq')
-plt.ylabel('Amplitude')
+plt.ylabel('Real part of the signal')
 plt.xlabel('Time')
 plt.title('Source and Estimated Source Signals')
 plt.legend()

@@ -83,7 +83,7 @@ plt.scatter(np.real(s_est_wiener), np.imag(s_est_wiener), label='Wiener')
 plt.scatter(np.real(s), np.imag(s), label='s')
 plt.xlabel('Real Part')
 plt.ylabel('Imaginary Part')
-plt.title('Complex Numbers in s_est_zf')
+plt.title('Complex Symbols retrieved by ZF and Wiener filters')
 plt.legend()
 plt.show()
 
