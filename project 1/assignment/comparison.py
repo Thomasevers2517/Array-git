@@ -34,7 +34,7 @@ for snr in SNRs:
     predictions['joint_freq'][snr] = np.zeros((num, d))
     predictions['joint_angle'][snr] = np.zeros((num, d))
     for i in range(num):
-        X_rao = generate_data_khatri_rao(M=M, N=N, theta_degrees=angles, f=freqs, snr_db=[snr,snr], m=m, P=P, delta=delta)
+        X_rao,_ = generate_data_khatri_rao(M=M, N=N, theta_degrees=angles, f=freqs, snr_db=[snr,snr], m=m, P=P, delta=delta)
 
         X_normal, _, _, _ = generate_data(M=M, N=N, theta_degrees=angles, f=freqs, snr_db=[snr,snr], delta=delta)
 

@@ -1,6 +1,7 @@
 import numpy as np
 import scipy as sp
-def generate_data_khatri_rao(M=3, N=500, theta_degrees=[30, 50], f = [0.005, 0.002], snr_db=[100, 100], m=5, P = 60, delta = 0.2):
+
+def generate_data_khatri_rao(M=3, N=500, theta_degrees=[30, 50], f = [0.005, 0.002], snr_db=[100, 100], m=5, P = 60, delta = 0.5): #delta =0.2
     d = len(theta_degrees)
     
     f = np.array(f)
@@ -50,5 +51,9 @@ def generate_data_khatri_rao(M=3, N=500, theta_degrees=[30, 50], f = [0.005, 0.0
         PHI[i, i] = phi[i]
     
     X = sp.linalg.khatri_rao(F_phi, A_theta) @ B @ np.multiply(F_p, S)
-
-    return X
+    print("X: ", X.shape)
+    print("np.multiply(F_p, S): ", np.multiply(F_p, S).shape)
+    print("sp.linalg.khatri_rao(F_p, S): ", sp.linalg.khatri_rao(F_p, S).shape)
+    X = sp.linalg.khatri_rao(F_phi, A_theta) @ B @ sp.linalg.khatri_rao(F_p, S)
+    print("X (F_p o S): ", X.shape)
+    return X, S

@@ -187,7 +187,7 @@ def determine_rtf_a_priori(mic_signals, noise_signal, source_signal, ref_mic_idx
     print(f"Time taken to calculate Rs: {end_time - start_time:.2f} seconds, for {num_wave_numbers * num_time_samples * 16 * num_sources} covariance and eigenvalue calculations")
     return rtf, Rn, signal_variance, stft_mic_signals
 
-def estimate_rtf_Rs(mic_signals, noise_signal, source_signal, use_GEVD=False, ref_mic_idx=0, fs=16000, nperseg=N_PER_SEG, noverlap=N_OVERLAP, cheat_alpha=0.5, alpha=0.5, det_threshold=0.5, cheat_time=60, eig_val_thr_ratio=100):
+def estimate_rtf_Rs(mic_signals, noise_signal, source_signal, use_GEVD=True, ref_mic_idx=0, fs=16000, nperseg=N_PER_SEG, noverlap=N_OVERLAP, cheat_alpha=0.8, alpha=0.1, det_threshold=0.1, cheat_time=60, eig_val_thr_ratio=200):
     
     print("Estimating rtf...")
     if use_GEVD:
@@ -320,10 +320,10 @@ def estimate_rtf_Rs(mic_signals, noise_signal, source_signal, use_GEVD=False, re
                 # Sort eigenvalues and eigenvectors in descending order
                 sorted_indices = np.argsort(w_x)[::-1]
                 eigenvalues = w_x[sorted_indices]
-                max_eigenvalues = eigenvalues[0]
+                max_eigenvalue = eigenvalues[0]
                 noise_eigenvalue = eigenvalues[1]
                 eigenvectors = V_x[:, sorted_indices]
-                max_eigenvectors = eigenvectors[:, 0]
+                max_eigenvector = eigenvectors[:, 0]
 
                 # Compute Rs from the previous Rs and Rn
                 Rs[k][l] = Rx[k][l-1] - Rn[k][l-1] #uncommenting this line is cheating
@@ -332,33 +332,33 @@ def estimate_rtf_Rs(mic_signals, noise_signal, source_signal, use_GEVD=False, re
                 # Sort eigenvalues and eigenvectors in descending order
                 sorted_indices = np.argsort(w_s)[::-1]
                 eigenvalues_prev = w_s[sorted_indices]
-                max_eigenvalues_prev = eigenvalues_prev[0]
+                max_eigenvalue_prev = eigenvalues_prev[0]
                 noise_eigenvalue_prev = eigenvalues_prev[1]
                 eigenvectors_prev = V_s[:, sorted_indices]
-                max_eigenvectors_prev = eigenvectors_prev[:, 0]
+                max_eigenvector_prev = eigenvectors_prev[:, 0]
 
                 # Decide on the detection threshold to update the noise space
-                corr_score = np.abs(np.vdot(max_eigenvectors, max_eigenvectors_prev)) / (np.linalg.norm(max_eigenvectors) * np.linalg.norm(max_eigenvectors_prev))
+                corr_score = np.abs(np.vdot(max_eigenvector, max_eigenvector_prev)) / (np.linalg.norm(max_eigenvector) * np.linalg.norm(max_eigenvector_prev))
                 
                 # Gather the information about the eigenvalues of the estimated source and measurement
                 if source_present_flag:
-                    #print("max_eigenvalues: ", max_eigenvalues, "\t\tnoise_eigenvalue: ", noise_eigenvalue)
+                    #print("max_eigenvalue: ", max_eigenvalue, "\t\tnoise_eigenvalue: ", noise_eigenvalue)
                     xxH_eig_src_present.append(w_x)
                     Rs_eig_src_present.append(w_s)
                     
                     # Update the average correlation score
                     avg_correlation_present_score += corr_score
-                    avg_eig_ratio_present += np.abs(max_eigenvalues / noise_eigenvalue)
+                    avg_eig_ratio_present += np.abs(max_eigenvalue / noise_eigenvalue)
 
                     # print("source present ")
                     # print("corr_score: ", corr_score)
                     # print("===xxH - nnH===")
-                    # print("np.abs(max_eigenvalues) / np.abs(noise_eigenvalue): ", np.abs(max_eigenvalues) / np.abs(noise_eigenvalue))
-                    # print("max_eigenvalues: ", max_eigenvalues, "\t\tnoise_eigenvalue: ", noise_eigenvalue)
+                    # print("np.abs(max_eigenvalue) / np.abs(noise_eigenvalue): ", np.abs(max_eigenvalue) / np.abs(noise_eigenvalue))
+                    # print("max_eigenvalue: ", max_eigenvalue, "\t\tnoise_eigenvalue: ", noise_eigenvalue)
                     # print("eigenvalues ", eigenvalues)
                     # print("===ssH===")
-                    # print("np.abs(max_eigenvalues_prev) / np.abs(noise_eigenvalue_prev): ", np.abs(max_eigenvalues_prev) / np.abs(noise_eigenvalue_prev))
-                    # print("max_eigenvalues_prev: ", max_eigenvalues_prev, "\t\tnoise_eigenvalue_prev: ", noise_eigenvalue_prev)
+                    # print("np.abs(max_eigenvalue_prev) / np.abs(noise_eigenvalue_prev): ", np.abs(max_eigenvalue_prev) / np.abs(noise_eigenvalue_prev))
+                    # print("max_eigenvalue_prev: ", max_eigenvalue_prev, "\t\tnoise_eigenvalue_prev: ", noise_eigenvalue_prev)
                     # print("eigenvalues_prev ", eigenvalues_prev)
                     # input("Press Enter to continue...")
                     # print("=====================================")
@@ -369,23 +369,23 @@ def estimate_rtf_Rs(mic_signals, noise_signal, source_signal, use_GEVD=False, re
 
                     # Update the average correlation score
                     avg_correlation_not_present_score += corr_score
-                    avg_eig_ratio_not_present += np.abs(max_eigenvalues / noise_eigenvalue)
+                    avg_eig_ratio_not_present += np.abs(max_eigenvalue / noise_eigenvalue)
                     
                     # # print("source not present ")
                     # print("corr_score: ", corr_score)
                     # print("===xxH - nnH===")
-                    # print("np.abs(max_eigenvalues) / np.abs(noise_eigenvalue): ", np.abs(max_eigenvalues) / np.abs(noise_eigenvalue))
-                    # print("max_eigenvalues: ", max_eigenvalues, "\t\tnoise_eigenvalue: ", noise_eigenvalue)
+                    # print("np.abs(max_eigenvalue) / np.abs(noise_eigenvalue): ", np.abs(max_eigenvalue) / np.abs(noise_eigenvalue))
+                    # print("max_eigenvalue: ", max_eigenvalue, "\t\tnoise_eigenvalue: ", noise_eigenvalue)
                     # print("eigenvalues ", eigenvalues)
                     # print("===ssH===")
-                    # print("np.abs(max_eigenvalues_prev) / np.abs(noise_eigenvalue_prev): ", np.abs(max_eigenvalues_prev) / np.abs(noise_eigenvalue_prev))
-                    # print("max_eigenvalues_prev: ", max_eigenvalues_prev, "\t\tnoise_eigenvalue_prev: ", noise_eigenvalue_prev)
+                    # print("np.abs(max_eigenvalue_prev) / np.abs(noise_eigenvalue_prev): ", np.abs(max_eigenvalue_prev) / np.abs(noise_eigenvalue_prev))
+                    # print("max_eigenvalue_prev: ", max_eigenvalue_prev, "\t\tnoise_eigenvalue_prev: ", noise_eigenvalue_prev)
                     # print("eigenvalues_prev ", eigenvalues_prev)
                     # input("Press Enter to continue...")
                     # print("=====================================")
 
                 # Gather statistics on the source detection
-                if corr_score > det_threshold and max_eigenvalues > np.abs(noise_eigenvalue)*eig_val_thr_ratio:
+                if corr_score > det_threshold and max_eigenvalue > np.abs(noise_eigenvalue)*eig_val_thr_ratio:
                     # Check when the detection algorithm starts detecting the source
                     if source_detection_begin == 0:
                         source_detection_begin = l
@@ -402,7 +402,7 @@ def estimate_rtf_Rs(mic_signals, noise_signal, source_signal, use_GEVD=False, re
                         source_no_det_count += 1
 
                 # Update the noise and signal space
-                if corr_score > det_threshold and max_eigenvalues > np.abs(noise_eigenvalue)*eig_val_thr_ratio:
+                if corr_score > det_threshold and max_eigenvalue > np.abs(noise_eigenvalue)*eig_val_thr_ratio:
                     Rx[k][l] = Rx[k][l-1]*alpha + xxH*(1 - alpha)
                     Rn[k][l] = Rn[k][l-1]
                 else:
@@ -414,18 +414,22 @@ def estimate_rtf_Rs(mic_signals, noise_signal, source_signal, use_GEVD=False, re
             
             if use_GEVD :
                 Rs_est[k][l] = Rx[k][l] - Rn[k][l]
-                w_s, V_s = np.linalg.eig(Rs_est[k][l])
+                w_s, V_s = np.linalg.eigh(Rs_est[k][l])
 
-                # Sort eigenvalues and eigenvectors in descending order
+                # Sort eigenvalues and eigenvectors in descending order and truncate the M-r smallest eigenvalues
                 sorted_indices = np.argsort(w_s)[::-1]
+                eigenvalues = w_s[sorted_indices]
                 eigenvectors = V_s[:, sorted_indices]
-                max_eigenvectors = eigenvectors[:, 0]
+                max_eigenvalue = eigenvalues[0]
+                max_eigenvector = eigenvectors[:, 0]
+                 
+                #Rs[k][l] = np.dot(max_eigenvector, np.dot(max_eigenvalue, max_eigenvector.conj().T))
 
                 # Calculate the signal variance from the Rs_est matrix
                 signal_variance[k][l] = np.trace(Rs_est[k][l]) / num_mics
 
                 # Now calculate the rtf from the principal eigenvector of Rs_hat for one source
-                rtf[k][l] = max_eigenvectors
+                rtf[k][l] = max_eigenvector
 
             else:
                 # Compute the hermitian square root of Rn^(1/2)
@@ -462,13 +466,13 @@ def estimate_rtf_Rs(mic_signals, noise_signal, source_signal, use_GEVD=False, re
                 # Sort eigenvalues and eigenvectors in descending order
                 sorted_indices = np.argsort(w_hat)[::-1]
                 eigenvectors = V_hat[:, sorted_indices]
-                max_eigenvectors = eigenvectors[:, 0]
+                max_eigenvector = eigenvectors[:, 0]
 
                 # Calculate the signal variance from the Rs_est matrix
                 signal_variance[k][l] = np.trace(Rs_hat) / num_mics
 
                 # Now calculate the rtf from the principal eigenvector of Rs_hat for one source
-                rtf[k][l] = max_eigenvectors
+                rtf[k][l] = max_eigenvector
 
             rtf[k][l] = rtf[k][l] / rtf[k][l][0]
 
@@ -518,39 +522,39 @@ def estimate_rtf_Rs(mic_signals, noise_signal, source_signal, use_GEVD=False, re
     xxH_eig_src_not_present_var = np.var(xxH_eig_src_not_present, axis=0)
     Rs_eig_src_not_present_var = np.var(Rs_eig_src_not_present, axis=0)
 
-    # print the mean and variance of the eigenvalues of the source and noise space
-    # print("xxH_eig_src_present_mean: ", xxH_eig_src_present_mean)
-    # print("Rs_eig_src_present_mean: ", Rs_eig_src_present_mean)
-    # print("xxH_eig_src_not_present_mean: ", xxH_eig_src_not_present_mean)
-    # print("Rs_eig_src_not_present_mean: ", Rs_eig_src_not_present_mean)
+    #print the mean and variance of the eigenvalues of the source and noise space
+    print("xxH_eig_src_present_mean: ", xxH_eig_src_present_mean)
+    print("Rs_eig_src_present_mean: ", Rs_eig_src_present_mean)
+    print("xxH_eig_src_not_present_mean: ", xxH_eig_src_not_present_mean)
+    print("Rs_eig_src_not_present_mean: ", Rs_eig_src_not_present_mean)
 
-    # print("xxH_eig_src_present_var: ", xxH_eig_src_present_var)
-    # print("Rs_eig_src_present_var: ", Rs_eig_src_present_var)
-    # print("xxH_eig_src_not_present_var: ", xxH_eig_src_not_present_var)
-    # print("Rs_eig_src_not_present_var: ", Rs_eig_src_not_present_var)
+    print("xxH_eig_src_present_var: ", xxH_eig_src_present_var)
+    print("Rs_eig_src_present_var: ", Rs_eig_src_present_var)
+    print("xxH_eig_src_not_present_var: ", xxH_eig_src_not_present_var)
+    print("Rs_eig_src_not_present_var: ", Rs_eig_src_not_present_var)
 
     # Plot the mean and variance of the eigenvalues of the source and noise space in two subplots
-    plt.figure(figsize=(10, 6))
-    plt.subplot(1, 2, 1)
-    plt.plot(xxH_eig_src_present_mean, label='xxH-Rn Source present')
-    plt.plot(Rs_eig_src_present_mean, label='Rs Source presentr')
-    plt.plot(xxH_eig_src_not_present_mean, label='xxH-Rn Source not present')
-    plt.plot(Rs_eig_src_not_present_mean, label='Rs Source not present')
-    plt.title('Mean of the eigenvalues of the source and noise space')
-    plt.xlabel('Sorted Eigenvalue Index')
-    plt.ylabel('Eigenvalue mean')
-    plt.legend()
+    # plt.figure(figsize=(10, 6))
+    # plt.subplot(1, 2, 1)
+    # plt.plot(xxH_eig_src_present_mean, label='xxH-Rn Source present')
+    # plt.plot(Rs_eig_src_present_mean, label='Rs Source presentr')
+    # plt.plot(xxH_eig_src_not_present_mean, label='xxH-Rn Source not present')
+    # plt.plot(Rs_eig_src_not_present_mean, label='Rs Source not present')
+    # plt.title('Mean of the eigenvalues of the source and noise space')
+    # plt.xlabel('Sorted Eigenvalue Index')
+    # plt.ylabel('Eigenvalue mean')
+    # plt.legend()
 
-    plt.subplot(1, 2, 2)
-    plt.plot(xxH_eig_src_present_var, label='xxH-Rn Source present')
-    plt.plot(Rs_eig_src_present_var, label='Rs Source presentr')
-    plt.plot(xxH_eig_src_not_present_var, label='xxH-Rn Source not present')
-    plt.plot(Rs_eig_src_not_present_var, label='Rs Source not present')
-    plt.title('Variance of the eigenvalues of the source and noise space')
-    plt.xlabel('Sorted Eigenvalue Index')
-    plt.ylabel('Eigenvalue variance')
-    plt.legend()
-    plt.show()
+    # plt.subplot(1, 2, 2)
+    # plt.plot(xxH_eig_src_present_var, label='xxH-Rn Source present')
+    # plt.plot(Rs_eig_src_present_var, label='Rs Source presentr')
+    # plt.plot(xxH_eig_src_not_present_var, label='xxH-Rn Source not present')
+    # plt.plot(Rs_eig_src_not_present_var, label='Rs Source not present')
+    # plt.title('Variance of the eigenvalues of the source and noise space')
+    # plt.xlabel('Sorted Eigenvalue Index')
+    # plt.ylabel('Eigenvalue variance')
+    # plt.legend()
+    # plt.show()
 
     return rtf, Rn, signal_variance, stft_mic_signals
 
@@ -561,13 +565,11 @@ def infer_geometry_ULA(impulse_responses, sample_rate=16000, speed_of_sound=343.
     # Calculate microphone coordinates
     frequency = sample_rate//2  # Assume the frequency is the Nyquist frequency
     wavelength = speed_of_sound / frequency  # Calculate the wavelength of the sound
+    print("Inter-microphone spacing: ", wavelength/2)
     for mic_idx in range(num_mics):
         mic_x = mic_idx * wavelength / 2  # Calculate the x-coordinate based on the microphone index and the wavelength
         mic_y = 0  # Assume the microphone is located at y=0
         geometry[num_sources + mic_idx] = [mic_x, mic_y]
-
-    mic_x = 0
-    mic_y = 0
 
     # Calculate source coordinates
     for source_idx in range(num_sources):
@@ -581,13 +583,13 @@ def infer_geometry_ULA(impulse_responses, sample_rate=16000, speed_of_sound=343.
             peak_mag_1 = impulse_response_1[peak_index_1] #+ np.random.normal(0, 0.0001)
             peak_mag_2 = impulse_response_2[peak_index_2] #+ np.random.normal(0, 0.0001)
             if peak_mag_1 == peak_mag_2:
-                peak_mag_2 = peak_mag_2 + 0.0001
+                peak_mag_2 = peak_mag_2 + 0.00001
 
             # Calculate the time delay and distance for each microphone and add a noise term
-            time_delay_1 = peak_index_1 / sample_rate + np.random.normal(0, 0.00001)
-            time_delay_2 = peak_index_2 / sample_rate + np.random.normal(0, 0.00001)
+            time_delay_1 = peak_index_1 / sample_rate + np.random.normal(0, 0.000001)
+            time_delay_2 = peak_index_2 / sample_rate + np.random.normal(0, 0.000001)
             if time_delay_1 == time_delay_2:
-                time_delay_2 = time_delay_2 + 0.0001
+                time_delay_2 = time_delay_2 + 0.00001
 
             # Calculate the distance traveled by sound for each microphone
             distance_1 = time_delay_1 * speed_of_sound
@@ -596,12 +598,12 @@ def infer_geometry_ULA(impulse_responses, sample_rate=16000, speed_of_sound=343.
             # Calculate the difference in time delay and distance between the two microphones
             difference_time_delay = time_delay_2 - time_delay_1 # Calculate the time delay difference
             difference_distance = difference_time_delay * speed_of_sound  # Calculate the difference in distance
-            
+            print("Difference in distance: ", difference_distance)
+            print("Difference in time delay: ", difference_time_delay)
             # Use trigonometry to calculate the x and y coordinates
             angle_mic_1 = np.arccos(((wavelength/2)**2 + peak_mag_1**2 - peak_mag_2**2) / (2 * (wavelength/2) * peak_mag_1))
-            angle_mic_2 = np.arccos(((wavelength/2)**2 + peak_mag_2**2 - peak_mag_1**2) / (2 * (wavelength/2) * peak_mag_2))
-            angle_mic = np.arcsin(difference_distance/(wavelength/2))
-
+            #angle_mic_1 = np.arccos(((wavelength/2)**2 + peak_mag_2**2 - peak_mag_1**2) / (2 * (wavelength/2) * peak_mag_2))
+            
             # Calculate the x and y coordinates of the source
             source_x = distance_1 * np.cos(angle_mic_1) + mic_idx * wavelength / 2
             source_y = distance_1 * np.sin(angle_mic_1)

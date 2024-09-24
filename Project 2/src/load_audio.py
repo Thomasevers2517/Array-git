@@ -58,15 +58,28 @@ def convolve_audio_sources(data_folder ="data/"):
     print("Loading impulse responses from .mat file...")
     impulse_responses = load_mat_file(mat_file_path) 
 
-    # Find the minimum length of the audio signals
-    min_length = (SAMPLE_FREQ * 5) + 800  # hard coded to the minimum length of the signals, approx 5 seconds, and fits the STFT settings
-    print("Truncated length of audio signals: ", min_length)
-
     # Calculate the number of sources and microphones
     num_sources = impulse_responses.shape[0]
     num_mics = impulse_responses.shape[1]
     print("Number of sources: ", num_sources)
     print("Number of microphones: ", num_mics)
+
+    # Upsample impulse reso=ponses to 16 kHz
+    # impulse_responses = np.array([signal.resample(impulse_response, 16000) for impulse_response in impulse_responses])
+
+    # Find the minimum length of the audio signals
+    min_length = (SAMPLE_FREQ * 5) + 800  # hard coded to the minimum length of the signals, approx 5 seconds, and fits the STFT settings
+    print("Truncated length of audio signals: ", min_length)
+
+    # # Plot impulse response per source and microphone
+    # fig, axs = plt.subplots(num_sources, num_mics, figsize=(15, 10))
+    # for source_idx in range(num_sources):
+    #     for mic_idx in range(num_mics):
+    #         impulse_response = impulse_responses[source_idx, mic_idx]
+    #         axs[source_idx, mic_idx].plot(impulse_response)
+    #         axs[source_idx, mic_idx].set_title(f"Source {source_idx + 1} - Mic {mic_idx + 1}")
+    # plt.tight_layout()
+    # plt.show()
     
     # Initialize the combined signals, path signals and clean signals
     combined_signals = np.array([None] * num_mics)
