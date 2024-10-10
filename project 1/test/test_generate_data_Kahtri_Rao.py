@@ -8,7 +8,7 @@ delta =0.5
 freqs = np.array([0.1, 0.12])
 angles = np.array([-20, 30])
 
-X, S = generate_data_khatri_rao(M=4, N=105, theta_degrees= angles, f =freqs, snr_db=[20, 20], delta = delta)
+X, S, _ = generate_data_khatri_rao(M=4, N=105, theta_degrees= angles, f =freqs, snr_db=[20, 20], delta = delta)
 
 import matplotlib.pyplot as plt
 plt.figure()

@@ -11,13 +11,17 @@ def joint(X, d, m, delta, P):
     print("X: ", X.shape)
     M = int(X.shape[0]/m)
     U, S,V = np.linalg.svd(X)
+
+    # Truncate SVD
     U = U[:, :d]
     S = S[:d]
     V = V[:d, :]
 
+    # Estimate columns of U
     U_phi_x = np.zeros((M*(m-1), d), dtype=complex)
     U_phi_y = np.zeros((M*(m-1), d), dtype=complex)
 
+    # Estimate rows of U
     U_theta_x = np.zeros(((M-1)*m, d), dtype=complex)
     U_theta_y = np.zeros(((M-1)*m, d), dtype=complex)
 
@@ -30,34 +34,29 @@ def joint(X, d, m, delta, P):
             U_theta_x[i*(M-1)+j, :] = U[i*M+j, :]
             U_theta_y[i*(M-1)+j, :] = U[i*M+j+1, :]
 
-
+    # Compute the pseudoinverse
     U_phi_x_inv = np.linalg.pinv(U_phi_x)
     U_theta_x_inv = np.linalg.pinv(U_theta_x)
 
-
-
-
+    # Compute the matrix M for phi and theta
     M_mat_phi = U_phi_x_inv @ U_phi_y
     M_mat_theta = U_theta_x_inv @ U_theta_y
-
-
+    
+    # Concate the two matrices
     M_mat = np.zeros((d, 2*d), dtype=complex)
-
     M_mat[:, :d] = M_mat_phi
     M_mat[:, d:] = M_mat_theta
         
-
     scipy.io.savemat('data.mat', {'M': M_mat})
 
     V, D = joint_diag(M_mat, 1e-10)
-
 
     phi = V @ M_mat_phi @ np.linalg.inv(V)
     theta = V @ M_mat_theta @ np.linalg.inv(V)
     # phi = V @ D[:,:d] @ np.linalg.inv(V)
     # theta = V @ D[:,d:] @ np.linalg.inv(V)
 
-
+    # Compute the frequencies and angles
     phi_rads = np.angle(phi)    
     theta_rads = np.angle(theta)
 

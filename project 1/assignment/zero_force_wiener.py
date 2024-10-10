@@ -4,8 +4,7 @@ from src.channel_eq_funcs import  gendata_conv, make_X
 import matplotlib.pyplot as plt
 N = 500
 P = 4
-m=2
-
+m = 2
 sigma = 0.5
 
 if N%2 != 0:
@@ -34,10 +33,10 @@ for i in range(P):
         h[i] = 1
     else:
         h[i] = -1
+
 H = np.zeros((m*P,m), dtype=complex)
 for i in range(m):
         H[i*P:(i+1)*P, m-1-i] = h
-
 
 
 X = H @ S
@@ -61,6 +60,8 @@ h_col =  H @ e
 
 w_zf = H @ np.linalg.pinv(H.conj().T @ H) @ e
 w_wiener = np.linalg.pinv(H @ H.conj().T + sigma**2 * np.eye(m*P)) @ h_col
+# Rx = X @ X.conj().T / N
+# w_wiener = np.linalg.pinv(H @ H.conj().T + sigma**2 * np.eye(m*P)) @ h_col
 
 print("shape of X", X.shape)
 print("shape of S", S.shape)

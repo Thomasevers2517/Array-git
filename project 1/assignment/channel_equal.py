@@ -4,13 +4,14 @@ import config_assignment
 from src.channel_eq_funcs import  gendata_conv, make_X
 N = 500
 P = 4
-sigma = 0.0
+sigma = 0
 
 QPSK = np.array([1+1j, -1+1j, -1-1j, 1-1j])/np.sqrt(2)
 s = np.zeros(N, dtype=complex)
 for i in range(N):
     s[i] = QPSK[np.random.randint(4)]
     
+print("s[0:5]:", s[0:5])
 x = gendata_conv(s, P, N, sigma)
 plt.figure()
 plt.plot(np.real(x), label='Real part')
@@ -21,8 +22,8 @@ plt.title('Received signal')
 plt.legend()
 plt.show()
 
-
 X = make_X(x, P, N)
+print(f"Shape of X: {X.shape}")
 # Print the rank of X
 print(f"Rank of X: {np.linalg.matrix_rank(X)}")
 

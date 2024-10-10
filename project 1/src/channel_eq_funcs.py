@@ -26,6 +26,7 @@ def gendata_conv(s, P, N, sigma):
         x[i] += (np.random.normal(0, sigma) + 1j * np.random.normal(0, sigma))/np.sqrt(2)
     
     return x
+
 def make_X(x, P, N):
     X = np.zeros((2*P, N-1), dtype=complex)
     for i in range(2*P):

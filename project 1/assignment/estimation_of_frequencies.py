@@ -1,17 +1,20 @@
-#1) It is rank 1
-
 import config_assignment
 import numpy as np
 import matplotlib.pyplot as plt
 from src.espirit.espirit import espirit_freq
 from src.data_generation.generate_data import generate_data
-d=2
-delta =0.5
-norm_freq = 0.02
+d = 2
+M = 3
+N = 20
+m = 3
+delta = 0.5
+thetas = [-20, 30]
+freqs = [0.1, 0.12]
+SNRs = [100, 100]
 
-X,_,_,_ = generate_data(M=3, N=500, theta_degrees=[30, 85], f = [norm_freq*1.8, norm_freq], snr_db=[1000, 1000], delta=delta)
+X,_,_,_ = generate_data(M=M, N=N, theta_degrees=thetas, f = freqs, snr_db=SNRs, delta=delta)
 
-pred_freqs = espirit_freq(X, d, 1)
-print("pred_freqs: ", pred_freqs)
-print("actual freqs: ", [norm_freq*1.8, norm_freq])
+pred_freqs = espirit_freq(X, d, m, 1)
 
+print("pred_freqs: ", np.sort(pred_freqs))
+print("Actual freqs: ", freqs)

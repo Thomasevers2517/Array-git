@@ -50,16 +50,17 @@ def generate_data(M=3, N=500, theta_degrees=[30, 50], f = [0.005, 0.002], snr_db
     d= len(theta_rad)
     c = 343
 
-
     X = np.zeros((M, N), dtype=complex)
     A =  np.zeros((M, d), dtype=complex) #antennas, sources, time
     print("ANGLE: ", np.sin(theta_rad))
-    
+    print("A: ", A)
     phi = np.array( np.exp(1j* (2*np.pi * delta  *  np.sin(theta_rad))))
+    print("phi:", phi)
     A[ 0, :] = np.ones(d)
+    print("A: ", A)
     for m in range(1,M):
         A[m, :] = A[m-1, :] * phi
-    
+    print("A: ", A)
     # Create a 3D array to hold the noise
     NOISE = np.zeros((d, N), dtype=complex)
 
@@ -71,7 +72,7 @@ def generate_data(M=3, N=500, theta_degrees=[30, 50], f = [0.005, 0.002], snr_db
     S = np.ones((d, N), dtype=complex)
     S[0, :] = 1/np.sqrt(2) + 1j/np.sqrt(2)
     # S[:, int(N/2):] = 1/np.sqrt(2) + 1j/np.sqrt(2)
-    S_withcar = np.zeros((d, N), dtype=complex)
+    S_withcar = np.zeros((d, N), dtype=complex) # signal modulated with carrier frequency
     for i in range(d):
         S_withcar[i, :] = np.exp(1j *2 * np.pi * f[i] * np.arange(N)) * (S[i, :]) + NOISE[i, :]
         

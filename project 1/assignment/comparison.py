@@ -8,18 +8,29 @@ from src.espirit.espirit import espirit
 from src.espirit.espirit import espirit_freq
 import numpy as np
 from matplotlib import pyplot as plt
-d=2
-M =3
-N = 20
-m =10
-P =100
-delta = 0.2
 
-freqs = np.array([0.1, 0.12])
-angles = np.array([-20, 30])
+# Old config of submitted assignment
+# d=2
+# M =3
+# N = 20
+# m =10
+# P =100
+# delta = 0.2
+# freqs = np.array([0.1, 0.12])
+# thetas = np.array([-20, 30])
+d = 2
+M = 3
+N = 20
+m = 6
+P = 2
+delta = 0.5
+thetas = [-20, 30]
+freqs = [0.1, 0.12]
+#SNRs = [100, 100]
 
 SNRs = [i*4 for i in range(0, 16) ]
 SNRs.append(100)
+print("SNRS:", SNRs)
 
 predictions = {}
 predictions['joint_freq'] = {}
@@ -34,27 +45,24 @@ for snr in SNRs:
     predictions['joint_freq'][snr] = np.zeros((num, d))
     predictions['joint_angle'][snr] = np.zeros((num, d))
     for i in range(num):
-        X_rao,_ = generate_data_khatri_rao(M=M, N=N, theta_degrees=angles, f=freqs, snr_db=[snr,snr], m=m, P=P, delta=delta)
+        X_rao,_,_ = generate_data_khatri_rao(M=M, N=N, theta_degrees=thetas, f=freqs, snr_db=[snr,snr], m=m, P=P, delta=delta)
 
-        X_normal, _, _, _ = generate_data(M=M, N=N, theta_degrees=angles, f=freqs, snr_db=[snr,snr], delta=delta)
+        X_normal, _, _, _ = generate_data(M=M, N=N, theta_degrees=thetas, f=freqs, snr_db=[snr,snr], delta=delta)
 
-    
         joint_pred_freqs, joint_pred_angles = joint(X_rao, d, m, delta, P)
         
-        pred_freq = espirit_freq(X_normal, d, 1)
+        pred_freq = espirit_freq(X_normal, d, m, 1)
         pred_angle = espirit(X_normal, d, delta)
         
         joint_pred_freqs.sort()
         joint_pred_angles.sort()
-        
+        pred_freq.sort()
+        pred_angle.sort()
     
         predictions['joint_freq'][snr][i] = np.array(joint_pred_freqs)
         predictions['joint_angle'][snr][i] = np.array(joint_pred_angles)    
         predictions['angle'][snr][i] = np.array(pred_angle)
         predictions['freq'][snr][i] = np.array(pred_freq)
-
-    
-        
 
  
 print(predictions['joint_freq'][8].shape) 
@@ -133,6 +141,7 @@ plt.yscale('log')
 plt.xlabel('SNR')
 plt.legend()
 plt.title('angle variance')
+
 plt.show()
 
 
